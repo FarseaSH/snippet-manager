@@ -10,13 +10,8 @@ export function folderPath(path: string): string {
   return path ? `/folder/${encodePath(path)}` : '/folder';
 }
 
-export function titleCase(name: string): string {
-  const acronyms: Record<string, string> = { http: 'HTTP', json: 'JSON', csv: 'CSV', ssh: 'SSH', api: 'API', sql: 'SQL', css: 'CSS' };
-  return name.split(/[-_]/).map(part => acronyms[part.toLowerCase()] ?? (part.charAt(0).toUpperCase() + part.slice(1))).join(' ');
-}
-
 export function folderLabel(path: string): string {
-  return path ? path.split('/').map(titleCase).join(' / ') : '内容库根目录';
+  return path ? path.split('/').join(' / ') : '内容库根目录';
 }
 
 export function belongsTo(path: string, folder: string): boolean {

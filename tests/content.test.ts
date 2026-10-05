@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseSnippet } from '../scripts/content/parse';
 import { readLibrary } from '../scripts/content/library';
+import { folderLabel } from '../src/core/paths';
 import type { Diagnostic } from '../src/core/types';
 
 const front = '---\nsnippet_name: Example\nsnippet_tags: []\n---\n\n';
@@ -114,6 +115,16 @@ describe('Markdown 产品规则', () => {
 });
 
 describe('文件库生成', () => {
+  it('目录名称、路径标签和搜索索引保留真实大小写与连接符', async () => {
+    const root = await fixture({ 'my_Python/HTTP-api/jsonData/a.md': front });
+    const result = await readLibrary(root);
+    const parent = result.library.folders.children[0];
+    expect(parent.name).toBe('my_Python');
+    expect(parent.children[0].name).toBe('HTTP-api');
+    expect(parent.children[0].children[0].name).toBe('jsonData');
+    expect(result.search[0].folder).toBe('my_Python / HTTP-api / jsonData');
+    expect(folderLabel('my_Python/HTTP-api/jsonData')).toBe('my_Python / HTTP-api / jsonData');
+  });
   it('目录名后的中括号指定图标，继承父目录并允许子目录覆盖，不影响排序与分类', async () => {
     const root = await fixture({
       '_folders.yml': 'folders:\n  - git[unknown-icon]\n  - python[ PY ]:\n      - files:\n          - json[json]\n      - http[unknown-icon]\n  - missing[python]\n',
@@ -124,8 +135,8 @@ describe('文件库生成', () => {
     expect(result.library.folders.children.map(folder => folder.path)).toEqual(['git', 'python']);
     const [git, python] = result.library.folders.children;
     expect(python.icon).toBe('py');
-    expect(python.children.find(folder => folder.name === 'HTTP')?.icon).toBe('py');
-    const files = python.children.find(folder => folder.name === 'Files')!;
+    expect(python.children.find(folder => folder.name === 'http')?.icon).toBe('py');
+    const files = python.children.find(folder => folder.name === 'files')!;
     expect(files.icon).toBe('py');
     expect(files.children[0].icon).toBe('json');
     expect(files.children[0].children[0].icon).toBe('json');
@@ -169,7 +180,7 @@ describe('文件库生成', () => {
     });
     const result = await readLibrary(root);
     expect(result.library.folders.children.map(folder => folder.path)).toEqual(['python', 'git']);
-    expect(result.library.folders.children[0].children.map(folder => folder.name)).toEqual(['Web', 'Files', 'Asyncio']);
+    expect(result.library.folders.children[0].children.map(folder => folder.name)).toEqual(['web', 'files', 'asyncio']);
     expect(result.library.folders.count).toBe(4);
     expect(result.library.folders.children[0].count).toBe(3);
     expect(result.search).toHaveLength(4);

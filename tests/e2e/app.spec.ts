@@ -9,7 +9,7 @@ const production = process.env.APP_TEST_MODE === 'production';
 const renderedLines = (page: Page) => page.locator('.code-fallback .line-numbers span, .monaco-editor .margin-view-overlays .line-numbers');
 test('目录图标继承与覆盖，列表路径和窄屏入口一致，配置修改实时生效', async ({ page }) => {
   test.skip(production, '使用临时目录与图标配置验证开发实时读取');
-  const prefix = `__folder-icons-${process.pid}`;
+  const prefix = `__Folder-icons-${process.pid}`;
   const directory = path.resolve('snippets', prefix);
   const configFile = path.resolve('snippets/_folders.yml');
   const original = await fs.readFile(configFile, 'utf8');
@@ -31,6 +31,7 @@ test('目录图标继承与覆盖，列表路径和窄屏入口一致，配置�
     await expect(deep.locator('.snippet-folder [data-language-icon]')).toHaveAttribute('data-language-icon', 'python');
     await expect(json.locator('.snippet-folder [data-language-icon]')).toHaveAttribute('data-language-icon', 'json');
     const scriptRow = page.locator(`.sidebar [data-folder-path="${prefix}/scripts"]`);
+    await expect(page.locator(`.sidebar [data-folder-path="${prefix}"] .folder-select`)).toContainText(prefix);
     await expect(scriptRow.locator('.folder-select [data-language-icon]')).toHaveAttribute('data-language-icon', 'python');
     childRules[0] = { 'scripts[js]': ['json[json]'] };
     await fs.writeFile(configFile, stringifyYaml(configuration));
@@ -46,8 +47,8 @@ test('目录图标继承与覆盖，列表路径和窄屏入口一致，配置�
     await page.locator(`#folder-picker [data-folder-path="${prefix}/scripts"] .folder-select`).click();
     await expect(page.locator('.folder-picker-button [data-language-icon]')).toHaveAttribute('data-language-icon', 'javascript');
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator('.mobile-subfolders button').filter({ hasText: 'Deep' }).locator('[data-language-icon]')).toHaveAttribute('data-language-icon', 'javascript');
-    await expect(page.locator('.mobile-subfolders button').filter({ hasText: 'JSON' }).locator('[data-language-icon]')).toHaveAttribute('data-language-icon', 'json');
+    await expect(page.locator('.mobile-subfolders button').filter({ hasText: 'deep' }).locator('[data-language-icon]')).toHaveAttribute('data-language-icon', 'javascript');
+    await expect(page.locator('.mobile-subfolders button').filter({ hasText: 'json' }).locator('[data-language-icon]')).toHaveAttribute('data-language-icon', 'json');
     delete rule[`${prefix}[py]`];
     rule[prefix] = childRules;
     childRules[0] = { scripts: ['json[json]'] };
@@ -172,8 +173,8 @@ test('长代码完整复制、折叠与滚动，JSON 高亮及旧模型释放', 
       expect(await readEditorCode(page)).toBe(name === 'JSON' ? json : source);
       expect(await modelCount()).toBe(1);
     }
-    await page.goto('snippet/guides/organizing');
-    await expect(page.locator('.empty-code')).toBeVisible();
+    await page.goto('folder');
+    await expect(page.locator('.welcome')).toBeVisible();
     expect(await modelCount()).toBe(0);
     expect(errors).toEqual([]);
   } finally { await fs.rm(file, { force: true }); }
@@ -243,9 +244,9 @@ test('目录递归、搜索定位与 Tab 说明保持不变', async ({ page }) =
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('./');
   await expect(page.getByRole('heading', { name: '好代码，随手可得。' })).toBeVisible();
-  await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^Python/ }).click();
+  await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^python/ }).click();
   await expect(page.locator('.snippet-item')).toHaveCount(3);
-  await expect(page.locator('.snippet-item').filter({ hasText: 'Format JSON' })).toContainText('Python / Files / JSON');
+  await expect(page.locator('.snippet-item').filter({ hasText: 'Format JSON' })).toContainText('python / files / json');
   await page.getByLabel('搜索代码片段').fill('json=');
   await expect(page.locator('.snippet-item')).toHaveCount(1);
   const item = page.locator('.snippet-item');
@@ -386,40 +387,59 @@ test('说明玻璃提示与整框点击切换，键盘可操作，短说明完�
   await expect(viewport).toHaveClass(/collapsed/);
 });
 
-test('状态栏紧接当前代码并随内容滚动，切换子片段更新信息与复制对象', async ({ page, context }) => {
+test('编辑器动态填满剩余高度，缩放、展开说明与切换长短代码时状态栏保持底部', async ({ page, context }) => {
+  test.skip(production, '使用临时内容验证动态布局');
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  for (const viewport of [{ width: 1440, height: 650 }, { width: 390, height: 844 }]) {
-    await page.setViewportSize(viewport);
-    await page.goto('snippet/python/http/requests');
-    const statusbar = page.locator('.code-statusbar');
-    await expect(page.locator('#code-panel .code-statusbar')).toHaveCount(1);
-    if (viewport.width > 700) await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
-    else await expect(page.locator('.code-fallback')).toBeVisible();
-    await expect(statusbar.locator('.language')).toHaveText('python');
-    await expect(statusbar.locator('.line-count')).toHaveText('9 行');
-    const original = (await statusbar.boundingBox())!;
-    const editor = (await page.locator('.highlighted-code').boundingBox())!;
-    expect(original.y).toBeCloseTo(editor.y + editor.height, 0);
-    expect(original.width).toBeCloseTo(editor.width, 0);
-    await page.locator('.description').click({ position: { x: 8, y: 8 } });
-    await page.locator('.snippet-detail-scroll').evaluate(el => { el.scrollTop = 0; });
-    const expanded = (await statusbar.boundingBox())!;
-    await page.locator('.snippet-detail-scroll').evaluate(el => { el.scrollTop = el.scrollHeight; });
-    expect(await page.locator('.snippet-detail-scroll').evaluate(el => el.scrollTop)).toBeGreaterThan(0);
-    const scrolled = await statusbar.boundingBox();
-    expect(scrolled!.y).toBeLessThan(expanded.y);
-    const scrolledEditor = (await page.locator('.highlighted-code').boundingBox())!;
-    expect(scrolled!.y).toBeCloseTo(scrolledEditor.y + scrolledEditor.height, 0);
-    await page.screenshot({ path: `test-results/code-statusbar-${viewport.width}.png`, fullPage: true });
-    await expect(page.getByRole('button', { name: '复制当前代码', exact: true })).toBeInViewport();
-    await page.getByRole('tab', { name: 'JSON Response' }).click();
-    await expect(statusbar.locator('.line-count')).toHaveText('2 行');
-    await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('data = response.json()\nprint(data)');
-    await page.goto('snippet/guides/organizing');
-    await expect(page.locator('.empty-code')).toBeVisible();
-    await expect(statusbar).toHaveCount(0);
-  }
+  const file = path.resolve(`snippets/__editor-layout-${process.pid}.md`);
+  const source = Array.from({ length: 150 }, (_, index) => `print("line-${index}")`).join('\n');
+  const description = Array.from({ length: 25 }, (_, index) => `说明段落 ${index}。`).join('\n\n');
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await fs.writeFile(file, `---\nsnippet_name: Editor Layout\nsnippet_tags: []\n---\n\n${description}\n\n# Long\n\n\`\`\`python\n${source}\n\`\`\`\n\n# Short\n\n\`\`\`python\nprint(1)\n\`\`\``);
+    for (const viewport of [{ width: 1440, height: 1000 }, { width: 1440, height: 650 }, { width: 390, height: 844 }, { width: 390, height: 600 }]) {
+      await page.setViewportSize(viewport);
+      await page.goto(`snippet/__editor-layout-${process.pid}`);
+      const editor = page.locator('.highlighted-code');
+      const statusbar = page.locator('#code-panel .code-statusbar');
+      if (viewport.width > 700) await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
+      else await expect(page.locator('.code-fallback')).toBeVisible();
+      const checkBottom = async () => {
+        await expect.poll(async () => {
+          const pane = (await page.locator('.snippet-detail-scroll').boundingBox())!;
+          const bar = (await statusbar.boundingBox())!;
+          return Math.round(pane.y + pane.height - bar.y - bar.height);
+        }).toBe(8);
+        const bar = (await statusbar.boundingBox())!;
+        const area = (await editor.boundingBox())!;
+        expect(bar.y).toBeCloseTo(area.y + area.height, 0);
+        expect(area.height).toBeGreaterThan(0);
+        await expect(page.getByRole('button', { name: '复制当前代码', exact: true })).toBeInViewport();
+      };
+      await checkBottom();
+      const height = (await editor.boundingBox())!.height;
+      if (viewport.width <= 700) {
+        await editor.evaluate(el => { el.scrollTop = el.scrollHeight; });
+        expect(await editor.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+      }
+      await page.getByRole('tab', { name: 'Short', exact: true }).click();
+      await expect(statusbar.locator('.line-count')).toHaveText('1 行');
+      await checkBottom();
+      expect((await editor.boundingBox())!.height).toBeCloseTo(height, 0);
+      await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('print(1)');
+      await page.getByRole('button', { name: '展开说明', exact: true }).evaluate((el: HTMLButtonElement) => el.click());
+      await checkBottom();
+      expect((await editor.boundingBox())!.height).toBeLessThan(height);
+      expect(await page.locator('.description').evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+      await page.locator('.description').evaluate(el => { el.scrollTop = el.scrollHeight; });
+      await page.getByRole('button', { name: '收起说明', exact: true }).evaluate((el: HTMLButtonElement) => el.click());
+      await checkBottom();
+      expect((await editor.boundingBox())!.height).toBeCloseTo(height, 0);
+      await page.screenshot({ path: `test-results/editor-layout-${viewport.width}-${viewport.height}.png` });
+    }
+    expect(errors).toEqual([]);
+  } finally { await fs.rm(file, { force: true }); }
 });
 
 test('唯一子片段直接显示代码，多个子片段保留 Tab', async ({ page, context }) => {
@@ -493,7 +513,7 @@ test('浏览器历史与首页恢复，明确链接优先', async ({ page }) => 
 });
 
 test('打开片段保留全部或父目录列表，历史与移动端返回保留来源范围', async ({ page }) => {
-  for (const [route, count, label] of [['folder', 8, '内容库根目录'], ['folder/python', 3, 'Python']] as const) {
+  for (const [route, count, label] of [['folder', 8, '内容库根目录'], ['folder/python', 3, 'python']] as const) {
     await page.goto(route);
     await expect(page.locator('.snippet-item')).toHaveCount(count);
     const names = await page.locator('.snippet-item-title strong').allTextContents();
@@ -524,7 +544,7 @@ test('打开片段保留全部或父目录列表，历史与移动端返回保�
     await page.setViewportSize({ width: 1440, height: 1000 });
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [route, count, label] of [['folder', 8, '内容库根目录'], ['folder/python', 3, 'Python']] as const) {
+  for (const [route, count, label] of [['folder', 8, '内容库根目录'], ['folder/python', 3, 'python']] as const) {
     await page.goto(route);
     await page.locator('.snippet-item').filter({ hasText: 'Format JSON' }).click();
     await expect(page.getByRole('heading', { name: 'Format JSON', exact: true })).toBeVisible();
@@ -535,7 +555,7 @@ test('打开片段保留全部或父目录列表，历史与移动端返回保�
   }
   await page.goto('snippet/python/files/json/format');
   await page.getByRole('button', { name: '返回', exact: true }).click();
-  await expect(page.locator('.folder-picker-button')).toHaveText('Python / Files / JSON');
+  await expect(page.locator('.folder-picker-button')).toHaveText('python / files / json');
   await expect(page.locator('.snippet-item')).toHaveCount(1);
 });
 
@@ -546,14 +566,14 @@ test('宽屏隐藏目录标题栏，窄屏通过当前路径按钮切换文件�
   await expect(page.locator('.snippet-item')).toHaveCount(2);
   await page.setViewportSize({ width: 900, height: 850 });
   await expect(page.locator('.sidebar')).toBeHidden();
-  await expect(page.locator('.folder-picker-button')).toHaveText('Linux');
+  await expect(page.locator('.folder-picker-button')).toHaveText('linux');
   await expect(page.locator('.folder-list-count')).toHaveText('2');
   await expect(page.locator('.list-header > p')).toHaveCount(0);
   await page.goto('folder/python/files/json');
-  await expect(page.locator('.folder-picker-button')).toHaveText('Python / Files / JSON');
+  await expect(page.locator('.folder-picker-button')).toHaveText('python / files / json');
   await page.locator('.folder-picker-button').click();
-  await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^Linux/ }).click();
-  await expect(page.locator('.folder-picker-button')).toHaveText('Linux');
+  await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^linux/ }).click();
+  await expect(page.locator('.folder-picker-button')).toHaveText('linux');
   await expect(page.locator('.folder-picker')).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.folder-picker-button')).toBeVisible();
@@ -569,7 +589,7 @@ test('平板文件夹入口与键盘 Tab 导航', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 850 });
   await page.goto('./');
   await page.getByRole('button', { name: /^选择文件夹：/ }).click();
-  await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^Python/ }).click();
+  await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^python/ }).click();
   await page.locator('.snippet-item').filter({ hasText: 'Python Requests' }).click();
   await page.getByRole('tab', { name: 'GET Request' }).focus();
   await page.keyboard.press('ArrowRight');
@@ -632,7 +652,7 @@ test('说明片段、图片、相对链接与搜索空状态', async ({ page }) 
 test('移动端分级导航、搜索返回、Tab 与页面宽度', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('./');
-  await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^Python/ }).click();
+  await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^python/ }).click();
   await expect(page.locator('.mobile-subfolders')).toBeVisible();
   await expect(page.locator('.snippet-item')).toHaveCount(3);
   await page.locator('.snippet-item').filter({ hasText: 'Python Requests' }).click();

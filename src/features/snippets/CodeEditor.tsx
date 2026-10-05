@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SubSnippet } from '../../core/types';
 
 interface Props { snippet: SubSnippet }
@@ -56,7 +56,7 @@ export function CodeEditor({ snippet }: Props) {
     </div>
   </div>;
 
-  return <div className="code-editor highlighted-code" data-state={status} style={{ '--code-height': `${snippet.code.split('\n').length * 22 + 32}px` } as CSSProperties}>
+  return <div className="code-editor highlighted-code" data-state={status}>
     <div className="editor-host" ref={hostRef} />
     {status === 'loading' && <div className="editor-loading" role="status">正在加载代码编辑器…</div>}
   </div>;

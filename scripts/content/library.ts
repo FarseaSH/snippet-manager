@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parse as parseYaml } from 'yaml';
 import { parseSnippet, validateMetadata } from './parse.ts';
-import { pagePath, titleCase, compareNames } from '../../src/core/paths.ts';
+import { pagePath, compareNames } from '../../src/core/paths.ts';
 import { getLanguageIcon } from '../../src/core/language-icons.ts';
 import type { Diagnostic, Folder, Library, SearchEntry, Snippet } from '../../src/core/types.ts';
 
@@ -71,7 +71,7 @@ export async function readLibrary(root: string, base = '/'): Promise<ContentBuil
   const actualPaths = new Set(snippets.map(snippet => snippet.path));
   for (const { file, target, url } of snippetLinks) if (!actualPaths.has(target)) warn(file, `Snippet 链接目标不存在或已跳过：${url}`);
   snippets.sort(compareNames);
-  const folderMap = new Map<string, Folder>(directories.map(directory => [directory, { path: directory, name: directory ? titleCase(path.posix.basename(directory)) : '全部片段', children: [], snippets: [], count: 0 }]));
+  const folderMap = new Map<string, Folder>(directories.map(directory => [directory, { path: directory, name: directory ? path.posix.basename(directory) : '全部片段', children: [], snippets: [], count: 0 }]));
   for (const [directory, folder] of folderMap) if (directory) folderMap.get(path.posix.dirname(directory) === '.' ? '' : path.posix.dirname(directory))!.children.push(folder);
   for (const snippet of snippets) folderMap.get(snippet.folder)!.snippets.push(snippet.path);
   let config: unknown[] = [];
@@ -121,6 +121,6 @@ export async function readLibrary(root: string, base = '/'): Promise<ContentBuil
   assignIcons(folderMap.get('')!);
   const library: Library = { version: '', folders: folderMap.get('')!, snippets };
   library.version = hash(JSON.stringify(library) + [...assets.keys()].join(','));
-  const search: SearchEntry[] = snippets.map(snippet => ({ path: snippet.path, name: snippet.name, tags: snippet.tags, folder: snippet.folder.split('/').map(titleCase).join(' / '), description: snippet.descriptionText, parts: snippet.subSnippets.map(sub => ({ id: sub.id, title: sub.title, description: sub.sourceDescription, code: sub.code })) }));
+  const search: SearchEntry[] = snippets.map(snippet => ({ path: snippet.path, name: snippet.name, tags: snippet.tags, folder: snippet.folder.split('/').join(' / '), description: snippet.descriptionText, parts: snippet.subSnippets.map(sub => ({ id: sub.id, title: sub.title, description: sub.sourceDescription, code: sub.code })) }));
   return { library, search, diagnostics, assets };
 }
