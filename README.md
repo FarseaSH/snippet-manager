@@ -16,7 +16,6 @@ npm run dev
 ## 项目目录
 
 ```text
-.pj/             产品方案，保持原位置
 docs/            编写规范与项目文档
 snippets/        内容源与 _folders.yml
 scripts/         共用解析器、开发读取、发布构建
@@ -124,5 +123,3 @@ SITE_BASE=/snippet-manager/ npm run preview
 如果托管平台使用 SPA 回退规则，应让 `/raw/`、`/data/`、`/content-assets/`、`/assets/` 下不存在的文件返回 HTTP 404；页面导航才回退至应用 HTML。现有静态文件应优先直接响应，`version.json`、`sw.js` 建议使用重新验证缓存策略。
 
 浏览器内的代码和 Markdown 复制来自当前内容版本；公共 Raw URL 指向站点当前发布的文件。源码已按公开访问设计。
-
-完整产品规则见 [.pj/Snippet Manager 产品规划 V0.1(1).md](<.pj/Snippet Manager 产品规划 V0.1(1).md>)。
