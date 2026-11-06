@@ -6,12 +6,13 @@ import { promisify } from 'node:util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 const production = process.env.APP_TEST_MODE === 'production';
+const contentRoot = process.env.SNIPPETS_DIR || path.resolve('snippets');
 const renderedLines = (page: Page) => page.locator('.code-fallback .line-numbers span, .monaco-editor .margin-view-overlays .line-numbers');
 test('目录图标继承与覆盖，列表路径和窄屏入口一致，配置修改实时生效', async ({ page }) => {
   test.skip(production, '使用临时目录与图标配置验证开发实时读取');
   const prefix = `__Folder-icons-${process.pid}`;
-  const directory = path.resolve('snippets', prefix);
-  const configFile = path.resolve('snippets/_folders.yml');
+  const directory = path.resolve(contentRoot, prefix);
+  const configFile = path.resolve(contentRoot, '_folders.yml');
   const original = await fs.readFile(configFile, 'utf8');
   const configuration = parseYaml(original);
   const childRules: Record<string, string[]>[] = [{ scripts: ['json[json]'] }];
@@ -144,7 +145,7 @@ test('Monaco 只读编辑器支持精确复制与查找，切换代码和窄屏�
 test('长代码完整复制、折叠与滚动，JSON 高亮及旧模型释放', async ({ page, context }) => {
   test.skip(production, '使用临时 Markdown 验证长代码与模型生命周期');
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  const file = path.resolve(`snippets/__editor-long-${process.pid}.md`);
+  const file = path.resolve(contentRoot, `__editor-long-${process.pid}.md`);
   const source = 'def greet():\n    print("hello")\n    return True\n\n' + Array.from({ length: 120 }, (_, index) => `print("line-${index}-${'x'.repeat(200)}")`).join('\n');
   const json = '{\n  "ok": true\n}';
   const errors: string[] = [];
@@ -174,7 +175,7 @@ test('长代码完整复制、折叠与滚动，JSON 高亮及旧模型释放', 
       expect(await modelCount()).toBe(1);
     }
     await page.goto('folder');
-    await expect(page.locator('.welcome')).toBeVisible();
+    await expect(page.locator('.folder-placeholder')).toBeVisible();
     expect(await modelCount()).toBe(0);
     expect(errors).toEqual([]);
   } finally { await fs.rm(file, { force: true }); }
@@ -182,7 +183,7 @@ test('长代码完整复制、折叠与滚动，JSON 高亮及旧模型释放', 
 
 test('子片段按语言显示 Logo，未知与缺失类型保留默认图标', async ({ page }) => {
   test.skip(production, '使用临时 Markdown 验证开发实时读取的混合语言');
-  const file = path.resolve(`snippets/__language-logo-${process.pid}.md`);
+  const file = path.resolve(contentRoot, `__language-logo-${process.pid}.md`);
   const parts = [
     ['Python', 'py', 'print("python")', 'python'],
     ['JavaScript', 'js', 'console.log("javascript")', 'javascript'],
@@ -246,6 +247,9 @@ test('目录递归、搜索定位与 Tab 说明保持不变', async ({ page }) =
   await expect(page.getByRole('heading', { name: '好代码，随手可得。' })).toBeVisible();
   await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^python/ }).click();
   await expect(page.locator('.snippet-item')).toHaveCount(3);
+  await expect(page.locator('.folder-placeholder')).toHaveText('点击左侧列表中的代码片段，查看内容');
+  await expect(page.locator('.folder-placeholder .brand-mark')).toBeVisible();
+  await expect(page.locator('.folder-placeholder button')).toHaveCount(0);
   await expect(page.locator('.snippet-item').filter({ hasText: 'Format JSON' })).toContainText('python / files / json');
   await page.getByLabel('搜索代码片段').fill('json=');
   await expect(page.locator('.snippet-item')).toHaveCount(1);
@@ -272,7 +276,7 @@ test('目录递归、搜索定位与 Tab 说明保持不变', async ({ page }) =
   await expect(page.locator('.description-content')).not.toHaveClass(/collapsed/);
   await page.getByRole('tab', { name: 'POST Request' }).click();
   await expect(page.locator('.description-content')).not.toHaveClass(/collapsed/);
-  await page.locator('.description').click({ position: { x: 8, y: 8 } });
+  await page.getByRole('button', { name: '收起说明', exact: true }).click();
   await expect(page.locator('.description-content')).toHaveClass(/collapsed/);
   await expect(page.locator('.markdown')).toBeVisible();
   await page.getByRole('button', { name: '清空搜索' }).click();
@@ -330,67 +334,85 @@ test('子片段说明无分割线和圆点，代码图标对齐名称，点击�
   }
 });
 
-test('说明玻璃提示与整框点击切换，键盘可操作，短说明完整显示', async ({ page }) => {
-  await page.goto('snippet/python/http/requests');
-  const viewport = page.locator('.description-content');
-  await expect(viewport).toHaveClass(/collapsed/);
-  const previewHeight = await viewport.evaluate(el => el.getBoundingClientRect().height);
-  expect(await viewport.evaluate(el => el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight))).toBeCloseTo(5, 1);
-  const frame = page.locator('.description');
-  const hint = frame.locator('.description-overflow-hint');
-  await expect(hint).toBeVisible();
-  await frame.screenshot({ path: 'test-results/description-glass-desktop.png' });
-  expect(await hint.evaluate(el => getComputedStyle(el).backdropFilter)).toContain('blur');
-  expect(await hint.evaluate(el => getComputedStyle(el).pointerEvents)).toBe('none');
-  await expect(frame.locator('.description-actions')).toHaveCount(0);
-  // Clicking text rather than a separate control expands and collapses.
-  await frame.locator('.markdown > p').first().click();
-  await expect(frame.getByRole('button', { name: '收起说明' })).toHaveAttribute('aria-expanded', 'true');
-  await expect(hint).toHaveCount(0);
-  await expect(frame.locator('.description-collapse-arrow')).toBeVisible();
-  await frame.screenshot({ path: 'test-results/description-expanded-desktop.png' });
-  expect(await viewport.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(previewHeight);
-  await frame.locator('.markdown > p').first().click();
-  await expect(viewport).toHaveClass(/collapsed/);
-  await expect(frame.locator('.description-collapse-arrow')).toHaveCount(0);
-  const disclosure = frame.getByRole('button', { name: '展开说明' });
-  await disclosure.focus();
-  await page.keyboard.press('Enter');
-  await expect(viewport).not.toHaveClass(/collapsed/);
-  await page.keyboard.press('Space');
-  await expect(viewport).toHaveClass(/collapsed/);
-  await frame.click({ position: { x: 8, y: 8 } });
-  await frame.locator('.summary-tab').last().click();
-  await expect(viewport).not.toHaveClass(/collapsed/);
-  // Selecting text to copy must not collapse the frame.
-  await frame.locator('.markdown > p').first().evaluate(el => {
-    const range = document.createRange(); range.selectNodeContents(el);
-    window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  });
-  await expect(viewport).not.toHaveClass(/collapsed/);
-  await page.evaluate(() => window.getSelection()?.removeAllRanges());
-  await frame.click({ position: { x: 8, y: 8 } });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(viewport).toHaveClass(/collapsed/);
-  expect(await viewport.evaluate(el => el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight))).toBeCloseTo(5, 1);
-  await frame.screenshot({ path: 'test-results/description-glass-mobile.png' });
-  await page.locator('.description').click({ position: { x: 8, y: 8 } });
-  await expect(frame.locator('.description-collapse-arrow')).toBeVisible();
-  await frame.screenshot({ path: 'test-results/description-expanded-mobile.png' });
-  await page.goto('snippet/python/files/read-json');
-  await expect(page.locator('.markdown')).toContainText('不需要安装额外依赖');
-  await expect(page.locator('.description-disclosure, .description-overflow-hint, .description-collapse-arrow')).toHaveCount(0);
-  await page.locator('.description').click({ position: { x: 8, y: 8 } });
-  await expect(viewport).not.toHaveClass(/collapsed/);
-  await page.goto('snippet/python/http/requests');
-  await expect(viewport).toHaveClass(/collapsed/);
+test('说明整框展开、仅按钮收起，键盘可操作，短说明完整显示', async ({ page }) => {
+  test.skip(production, '使用临时片段验证说明交互');
+  const prefix = `__Description-${process.pid}`;
+  const directory = path.resolve(contentRoot, prefix);
+  const front = '---\nsnippet_name: Description Interaction\nsnippet_tags: []\n---\n\n';
+  await fs.mkdir(directory, { recursive: true });
+  try {
+    const paragraphs = Array.from({ length: 24 }, (_, index) => `说明段落 ${index}，用于检查阅读和滚动时不会误收起。`).join('\n\n');
+    await fs.writeFile(path.join(directory, 'long.md'), front + paragraphs + '\n\n# Example\n\n示例说明\n\n```python\nprint(1)\n```\n\n# Another\n\n另一段说明\n\n```python\nprint(2)\n```');
+    await fs.writeFile(path.join(directory, 'short.md'), front + '不需要安装额外依赖');
+    await page.goto(`snippet/${prefix}/long`);
+    const viewport = page.locator('.description-content');
+    await expect(viewport).toHaveClass(/collapsed/);
+    const previewHeight = await viewport.evaluate(el => el.getBoundingClientRect().height);
+    expect(await viewport.evaluate(el => el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight))).toBeCloseTo(5, 1);
+    const frame = page.locator('.description');
+    const hint = frame.locator('.description-overflow-hint');
+    await expect(hint).toBeVisible();
+    await frame.screenshot({ path: 'test-results/description-glass-desktop.png' });
+    expect(await hint.evaluate(el => getComputedStyle(el).backdropFilter)).toContain('blur');
+    expect(await hint.evaluate(el => getComputedStyle(el).pointerEvents)).toBe('none');
+    await expect(frame.locator('.description-actions')).toHaveCount(0);
+    // Text expands the frame, but cannot collapse it once expanded.
+    await frame.locator('.markdown > p').first().click();
+    await expect(frame.getByRole('button', { name: '收起说明' })).toHaveAttribute('aria-expanded', 'true');
+    await expect(hint).toHaveCount(0);
+    await expect(frame.locator('.description-collapse-arrow')).toBeVisible();
+    await frame.screenshot({ path: 'test-results/description-expanded-desktop.png' });
+    expect(await viewport.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(previewHeight);
+    await frame.locator('.markdown > p').first().click();
+    await frame.click({ position: { x: 8, y: 8 } });
+    await expect(viewport).not.toHaveClass(/collapsed/);
+    await frame.getByRole('button', { name: '收起说明' }).click();
+    await expect(viewport).toHaveClass(/collapsed/);
+    await expect(frame.locator('.description-collapse-arrow')).toHaveCount(0);
+    const disclosure = frame.getByRole('button', { name: '展开说明' });
+    await disclosure.focus();
+    await page.keyboard.press('Enter');
+    await expect(viewport).not.toHaveClass(/collapsed/);
+    await page.keyboard.press('Space');
+    await expect(viewport).toHaveClass(/collapsed/);
+    await frame.click({ position: { x: 8, y: 8 } });
+    await frame.locator('.summary-tab').last().click();
+    await expect(viewport).not.toHaveClass(/collapsed/);
+    // Selecting text to copy must not collapse the frame.
+    await frame.locator('.markdown > p').first().evaluate(el => {
+      const range = document.createRange(); range.selectNodeContents(el);
+      window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await expect(viewport).not.toHaveClass(/collapsed/);
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await frame.getByRole('button', { name: '收起说明' }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(viewport).toHaveClass(/collapsed/);
+    expect(await viewport.evaluate(el => el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight))).toBeCloseTo(5, 1);
+    await frame.screenshot({ path: 'test-results/description-glass-mobile.png' });
+    await page.locator('.description').click({ position: { x: 8, y: 8 } });
+    await expect(frame.locator('.description-collapse-arrow')).toBeVisible();
+    await frame.screenshot({ path: 'test-results/description-expanded-mobile.png' });
+    await frame.click({ position: { x: 8, y: 8 } });
+    await expect(viewport).not.toHaveClass(/collapsed/);
+    const collapse = frame.getByRole('button', { name: '收起说明' });
+    await expect(collapse).toBeInViewport();
+    await collapse.click();
+    await expect(viewport).toHaveClass(/collapsed/);
+    await page.goto(`snippet/${prefix}/short`);
+    await expect(page.locator('.markdown')).toContainText('不需要安装额外依赖');
+    await expect(page.locator('.description-disclosure, .description-overflow-hint, .description-collapse-arrow')).toHaveCount(0);
+    await page.locator('.description').click({ position: { x: 8, y: 8 } });
+    await expect(viewport).not.toHaveClass(/collapsed/);
+    await page.goto(`snippet/${prefix}/long`);
+    await expect(viewport).toHaveClass(/collapsed/);
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
 });
-
 test('编辑器动态填满剩余高度，缩放、展开说明与切换长短代码时状态栏保持底部', async ({ page, context }) => {
   test.skip(production, '使用临时内容验证动态布局');
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  const file = path.resolve(`snippets/__editor-layout-${process.pid}.md`);
+  const file = path.resolve(contentRoot, `__editor-layout-${process.pid}.md`);
   const source = Array.from({ length: 150 }, (_, index) => `print("line-${index}")`).join('\n');
   const description = Array.from({ length: 25 }, (_, index) => `说明段落 ${index}。`).join('\n\n');
   const errors: string[] = [];
@@ -408,7 +430,8 @@ test('编辑器动态填满剩余高度，缩放、展开说明与切换长短�
         await expect.poll(async () => {
           const pane = (await page.locator('.snippet-detail-scroll').boundingBox())!;
           const bar = (await statusbar.boundingBox())!;
-          return Math.round(pane.y + pane.height - bar.y - bar.height);
+          const border = await statusbar.evaluate(el => Number.parseFloat(getComputedStyle(el.parentElement!).borderBottomWidth));
+          return Math.round(pane.y + pane.height - bar.y - bar.height - border);
         }).toBe(8);
         const bar = (await statusbar.boundingBox())!;
         const area = (await editor.boundingBox())!;
@@ -489,7 +512,7 @@ test('四种复制对象正确，深层链接可刷新，Raw 文件保持原文'
   const rawLink = await page.evaluate(() => navigator.clipboard.readText());
   const raw = await request.get(rawLink);
   expect(raw.status()).toBe(200); expect(raw.headers()['content-type']).not.toContain('text/html');
-  const original = await fs.readFile('snippets/python/http/requests.md', 'utf8');
+  const original = await fs.readFile(path.join(contentRoot, 'python/http/requests.md'), 'utf8');
   expect(await raw.text()).toBe(original);
   await page.getByRole('button', { name: '复制 Markdown', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(original);
@@ -601,7 +624,7 @@ test('平板文件夹入口与键盘 Tab 导航', async ({ page }) => {
 test('完整版本更新：下载失败保持旧版，准备成功后提示刷新切换', async ({ page }) => {
   test.skip(!production || Boolean(process.env.SITE_BASE), '此测试在根路径生产模式运行，并临时重建本地产物');
   test.setTimeout(90_000);
-  const file = path.resolve(`snippets/__version-update-${process.pid}.md`);
+  const file = path.resolve(contentRoot, `__version-update-${process.pid}.md`);
   const build = () => promisify(execFile)(process.execPath, ['node_modules/vite/bin/vite.js', 'build'], { maxBuffer: 4 * 1024 * 1024 });
   try {
     await page.goto('./');
@@ -677,7 +700,7 @@ test('移动端分级导航、搜索返回、Tab 与页面宽度', async ({ page
 test('实时读入：错误文件跳过、修复后出现、修改与删除自动更新', async ({ page, request }) => {
   test.skip(production, '实时读取仅适用于开发模式');
   const filename = `__live-smoke-${process.pid}.md`;
-  const file = path.resolve('snippets', filename);
+  const file = path.resolve(contentRoot, filename);
   const front = '---\nsnippet_name: Live Reload Smoke\nsnippet_tags: [live]\n---\n\n';
   try {
     await page.goto('./');
@@ -724,5 +747,326 @@ test('生产 PWA 全库离线，包括未访问过的片段、搜索、Raw 与�
   const raw = await page.evaluate(async url => (await fetch(url)).text(), rawUrl);
   expect(raw).toContain('snippet_name: Python Requests');
   await page.getByRole('button', { name: '复制 Markdown', exact: true }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await fs.readFile('snippets/guides/organizing.md', 'utf8'));
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await fs.readFile(path.join(contentRoot, 'guides/organizing.md'), 'utf8'));
+});
+
+test('展开代码仅占正文区，保留当前代码和编辑器状态，按钮与 Esc 恢复', async ({ page, context }) => {
+  test.skip(production, '使用临时代码验证专注模式');
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const prefix = `__Code-focus-${process.pid}`;
+  const directory = path.resolve(contentRoot, prefix);
+  const front = '---\nsnippet_name: Code Focus\nsnippet_tags: [focus]\n---\n\n';
+  const source = 'def example():\n    print("folded")\n    return 1\n\n' + Array.from({ length: 160 }, (_, i) => `print("line-${i}")`).join('\n');
+  await fs.mkdir(directory, { recursive: true });
+  try {
+    await fs.writeFile(path.join(directory, 'code.md'), front + '说明正文。\n\n# First\n\n```python\nprint("first")\n```\n\n# Long\n\n```python\n' + source + '\n```');
+    await fs.writeFile(path.join(directory, 'empty.md'), front.replace('Code Focus', 'Without Code') + '只有说明');
+    await page.goto(`snippet/${prefix}/code`);
+    await page.getByRole('tab', { name: 'Long', exact: true }).click();
+    const editor = page.locator('.code-editor');
+    await expect(editor).toHaveAttribute('data-state', 'ready');
+    await page.locator('.codicon-folding-expanded').first().click();
+    await expect(page.locator('.codicon-folding-collapsed')).toHaveCount(1);
+    const editorState = () => page.evaluate(async () => {
+      const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
+      const { monaco } = await import(moduleUrl);
+      const instance = monaco.editor.getEditors()[0];
+      return { top: instance.getScrollTop(), model: instance.getModel().id, folding: instance.saveViewState().contributionsState['editor.contrib.folding'] };
+    });
+    await page.evaluate(async () => {
+      const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
+      const { monaco } = await import(moduleUrl);
+      monaco.editor.getEditors()[0].setScrollTop(1500);
+    });
+    const before = await editorState();
+    const sidebar = await page.locator('.sidebar').boundingBox();
+    const list = await page.locator('.snippet-panel').boundingBox();
+    const original = await page.locator('.code-card').boundingBox();
+    await page.getByRole('button', { name: '展开代码', exact: true }).click();
+    await expect(page.getByRole('button', { name: '恢复正文' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('heading', { name: 'Code Focus', exact: true })).toBeHidden();
+    await expect(page.getByRole('tablist', { name: '子片段' })).toBeHidden();
+    await expect(page.locator('.description')).toBeHidden();
+    expect(await page.locator('.sidebar').boundingBox()).toEqual(sidebar);
+    expect(await page.locator('.snippet-panel').boundingBox()).toEqual(list);
+    const panel = await page.locator('.detail-panel').boundingBox();
+    const focused = await page.locator('.code-card').boundingBox();
+    expect(focused).toEqual(panel);
+    expect(focused!.height).toBeGreaterThan(original!.height);
+    await expect(page.getByLabel('当前代码状态栏')).toBeInViewport();
+    await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(source);
+    expect((await editorState()).model).toBe(before.model);
+    expect((await editorState()).folding).toEqual(before.folding);
+    await page.screenshot({ path: 'test-results/code-focused-desktop.png' });
+    // Escape also works while the editor has keyboard focus.
+    await page.locator('.monaco-editor textarea').focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: '展开代码', exact: true })).toBeFocused();
+    await expect(page.getByRole('tab', { name: 'Long', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect.poll(editorState).toEqual(before);
+    expect((await editorState()).folding).toEqual(before.folding);
+    await page.getByRole('button', { name: '展开代码', exact: true }).click();
+    await page.evaluate(async () => {
+      const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
+      const { monaco } = await import(moduleUrl);
+      monaco.editor.getEditors()[0].setScrollTop(1800);
+    });
+    const changed = await editorState();
+    await page.getByRole('button', { name: '恢复正文' }).click();
+    await expect.poll(editorState).toEqual(changed);
+    await page.getByRole('button', { name: '展开代码', exact: true }).click();
+    await page.locator('.snippet-item').filter({ hasText: 'Without Code' }).click();
+    await expect(page.locator('.empty-code')).toBeVisible();
+    await expect(page.getByRole('button', { name: '恢复正文' })).toHaveCount(0);
+    await page.goto(`snippet/${prefix}/code`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('tab', { name: 'Long', exact: true }).click();
+    const fallback = page.locator('.code-fallback');
+    await fallback.evaluate(el => { el.scrollTop = 1200; el.scrollLeft = 20; });
+    const mobileScroll = await fallback.evaluate(el => ({ top: el.scrollTop, left: el.scrollLeft }));
+    await page.getByRole('button', { name: '展开代码', exact: true }).click();
+    await expect(page.locator('.description')).toBeHidden();
+    await expect(page.getByLabel('当前代码状态栏')).toBeInViewport();
+    expect(await page.locator('.code-card').boundingBox()).toEqual(await page.locator('.detail-panel').boundingBox());
+    await page.screenshot({ path: 'test-results/code-focused-mobile.png' });
+    await page.getByRole('button', { name: '恢复正文' }).click();
+    expect(await fallback.evaluate(el => ({ top: el.scrollTop, left: el.scrollLeft }))).toEqual(mobileScroll);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test('Markdown 默认预览、底栏切换、代码块复制与展开阅读，手机可用', async ({ page, context }) => {
+  test.skip(production, '使用开发模块检查双模式滚动状态');
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const raw = await fs.readFile('docs/examples/markdown-preview.md', 'utf8');
+  const prefix = `__Markdown-preview-${process.pid}`;
+  const directory = path.join(contentRoot, prefix);
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(path.join(directory, 'preview.md'), raw);
+  try {
+    const markdown = raw.split('````markdown\n')[1].split('\n````')[0];
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`snippet/${prefix}/preview`);
+    const preview = page.getByRole('region', { name: 'Markdown 预览', exact: true });
+    const footer = page.getByLabel('当前代码状态栏');
+    await expect(preview).toBeVisible();
+    await expect(page.locator('.code-window-title')).toHaveText('Markdown 预览');
+    await expect(page.locator('.window-traffic-lights .window-dot')).toHaveCount(3);
+    await expect(page.locator('.window-traffic-lights button')).toHaveCount(0);
+    await expect(page.locator('.markdown-window')).toHaveCSS('border-top-width', '1px');
+    await expect(preview.getByRole('heading', { name: '小小代码库', exact: true })).toBeVisible();
+    await expect(preview.locator('table')).toHaveCount(1);
+    await expect(preview.getByRole('checkbox')).toHaveCount(4);
+    await expect(preview.locator('.preview-code-language')).toHaveText(['bash', 'python', 'json']);
+    await expect(preview).toHaveCSS('background-color', 'rgb(250, 250, 250)');
+    await expect(preview.locator('.preview-code-block').first()).toHaveCSS('background-color', 'rgb(248, 248, 249)');
+    await expect(preview.locator('.preview-code-block pre').first()).toHaveCSS('background-color', 'rgb(248, 248, 249)');
+    await expect(preview.locator('.preview-code-header [data-language-icon="bash-prompt"]')).toBeVisible();
+    await expect(preview.locator('.preview-code-header [data-language-icon="python"]')).toHaveCSS('fill', 'rgb(55, 118, 171)');
+    await expect(preview.locator('.preview-code-header [data-language-icon="json"]')).toBeVisible();
+    const firstBlock = preview.locator('.preview-code-block').first();
+    await expect(firstBlock.locator('.preview-line-numbers > span')).toHaveText(['1', '2']);
+    await expect(preview.locator('.preview-code-block').nth(1).locator('.preview-line-numbers > span')).toHaveText(['1', '2', '3', '4', '5']);
+    expect(await firstBlock.locator('.preview-line-numbers').evaluate(el => getComputedStyle(el).userSelect)).toBe('none');
+    await expect(page.getByRole('button', { name: '查看源代码' })).toBeVisible();
+    await expect(page.locator('.code-editor')).toBeHidden();
+    const firstCopy = preview.getByRole('button', { name: '复制代码块 1', exact: true });
+    // Observe the transient success state before clicking, even if the driver returns after it resets.
+    await preview.evaluate(root => {
+      const observer = new MutationObserver(() => {
+        const button = root.querySelector('[data-preview-copy="0"]')!;
+        if (button.classList.contains('copied')) {
+          (root as HTMLElement).dataset.copyFeedback = JSON.stringify({
+            color: getComputedStyle(button).color,
+            checkVisible: button.querySelector('.preview-copy-check')!.getBoundingClientRect().width > 0,
+          });
+          observer.disconnect();
+        }
+      });
+      observer.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+    });
+    await firstCopy.click();
+    await expect.poll(() => preview.getAttribute('data-copy-feedback')).toBe(JSON.stringify({ color: 'rgb(21, 128, 61)', checkVisible: true }));
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npm install\nnpm run dev');
+    await expect(firstCopy).not.toHaveClass(/copied/);
+    await expect(firstCopy.locator('.preview-copy-icon')).toBeVisible();
+    await preview.getByRole('button', { name: '复制代码块 2', exact: true }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('def greet(name: str) -> str:\n    return f"你好，{name}！欢迎来到代码库。"\n\n\nprint(greet("开发者"))');
+    await footer.getByRole('button', { name: '复制 Markdown', exact: true }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(markdown);
+    await preview.evaluate(el => { el.scrollTop = 260; });
+    const previewTop = await preview.evaluate(el => el.scrollTop);
+    await page.getByRole('button', { name: '查看源代码' }).click();
+    await expect(page.locator('.code-window-title')).toHaveCount(0);
+    await expect(page.locator('.window-traffic-lights')).toHaveCount(0);
+    await expect(page.locator('.markdown-window')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '展开代码', exact: true })).toHaveCSS('position', 'absolute');
+    await expect(page.locator('.code-editor')).toBeVisible();
+    await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
+    await page.screenshot({ path: 'test-results/markdown-source-desktop.png' });
+    await page.evaluate(async () => {
+      const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
+      const { monaco } = await import(moduleUrl);
+      monaco.editor.getEditors()[0].setScrollTop(300);
+    });
+    await page.getByRole('button', { name: '切换到预览' }).click();
+    await expect(preview).toBeVisible();
+    expect(await preview.evaluate(el => el.scrollTop)).toBe(previewTop);
+    await page.getByRole('button', { name: '查看源代码' }).click();
+    expect(await page.evaluate(async () => {
+      const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
+      const { monaco } = await import(moduleUrl);
+      return monaco.editor.getEditors()[0].getScrollTop();
+    })).toBe(300);
+    await page.getByRole('button', { name: '切换到预览' }).click();
+    await page.getByRole('button', { name: '展开代码', exact: true }).click();
+    await expect(preview).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Markdown 预览示例', exact: true })).toBeHidden();
+    await expect(footer).toBeInViewport();
+    await page.keyboard.press('Escape');
+    expect(await preview.evaluate(el => el.scrollTop)).toBe(previewTop);
+    await preview.evaluate(el => { el.scrollTop = 0; });
+    await page.screenshot({ path: 'test-results/markdown-preview-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(preview).toBeVisible();
+    await expect(page.getByRole('button', { name: '查看源代码' })).toBeInViewport();
+    await expect(footer.getByRole('button', { name: '复制 Markdown', exact: true })).toBeInViewport();
+    await page.screenshot({ path: 'test-results/markdown-preview-mobile.png' });
+    await page.getByRole('button', { name: '查看源代码' }).click();
+    await expect(page.locator('.code-fallback')).toBeVisible();
+    await page.getByRole('button', { name: '切换到预览' }).click();
+    await expect(preview).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.goto('snippet/python/files/read-json');
+    await expect(page.locator('.code-view-toggle')).toHaveCount(0);
+    await expect(page.locator('.code-fallback')).toBeVisible();
+    await page.goto(`snippet/${prefix}/preview`);
+    await expect(preview).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test('行内代码支持修饰键复制、悬停提示和局部反馈，不触发展开或链接', async ({ page, context }) => {
+  test.skip(production, '使用临时片段验证行内代码交互');
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const prefix = `__Inline-copy-${process.pid}`;
+  const directory = path.resolve(contentRoot, prefix);
+  const front = '---\nsnippet_name: Inline Copy\nsnippet_tags: []\n---\n\n';
+  const markdown = '# Inline Preview\n\n复制 `preview  value & <tag>`。\n\n链接 [`link-value`](https://example.invalid/)\n\n```python\nvalue = "block-value"\n```';
+  const description = '复制 `ScriptInputArgs`，或访问 [`description-link`](https://example.invalid/)。\n\n' + Array.from({ length: 12 }, (_, i) => `说明段落 ${i}。`).join('\n\n');
+  await fs.mkdir(directory, { recursive: true });
+  try {
+    await fs.writeFile(path.join(directory, 'example.md'), front + description + '\n\n# Markdown\n\n````md\n' + markdown + '\n````');
+    await page.goto(`snippet/${prefix}/example`);
+    const descriptionFrame = page.locator('.description');
+    const descriptionCode = descriptionFrame.locator('p > code').first();
+    const disclosure = page.locator('.description-content');
+    const tooltip = page.locator('.inline-code-feedback');
+    const modifier = await page.evaluate(() => navigator.platform.includes('Mac') ? 'Meta' : 'Control');
+    await expect(disclosure).toHaveClass(/collapsed/);
+    await descriptionCode.hover();
+    await expect(descriptionCode).toHaveCSS('cursor', 'text');
+    const normalColor = await descriptionCode.evaluate(el => getComputedStyle(el).color);
+    const normalBackground = await descriptionCode.evaluate(el => getComputedStyle(el).backgroundColor);
+    // Pressing the key while already hovering updates the affordance immediately.
+    await page.keyboard.down(modifier);
+    await expect(descriptionCode).toHaveCSS('color', 'rgb(154, 52, 18)');
+    await expect(descriptionCode).toHaveCSS('font-weight', '600');
+    await expect(descriptionCode).toHaveCSS('cursor', 'pointer');
+    await expect(descriptionCode).toHaveCSS('background-color', normalBackground);
+    await expect(descriptionCode).toHaveCSS('outline-style', 'none');
+    await descriptionCode.evaluate(code => {
+      const observer = new MutationObserver(() => {
+        const tooltip = document.querySelector<HTMLElement>('.inline-code-feedback');
+        if (!tooltip || getComputedStyle(tooltip).visibility !== 'visible') return;
+        document.body.dataset.inlineFeedback = JSON.stringify({
+          text: tooltip.textContent,
+          above: tooltip.getBoundingClientRect().bottom < code.getBoundingClientRect().top,
+        });
+        observer.disconnect();
+      });
+      observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'] });
+    });
+    await descriptionCode.click();
+    await expect.poll(() => page.locator('body').getAttribute('data-inline-feedback')).toBe(JSON.stringify({ text: '已复制', above: true }));
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('ScriptInputArgs');
+    await expect(disclosure).toHaveClass(/collapsed/);
+    await page.screenshot({ path: 'test-results/inline-code-description.png' });
+    await page.keyboard.up(modifier);
+    await expect(descriptionCode).toHaveCSS('cursor', 'text');
+    await expect(descriptionCode).toHaveCSS('color', normalColor);
+    await expect(tooltip).toHaveCount(0);
+    await descriptionCode.click();
+    await expect(disclosure).not.toHaveClass(/collapsed/);
+    await page.getByRole('button', { name: '收起说明' }).click();
+    await descriptionCode.hover();
+    await page.keyboard.down(modifier);
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    await expect(descriptionCode).toHaveCSS('cursor', 'text');
+    await expect(descriptionCode).toHaveCSS('color', normalColor);
+    await page.keyboard.up(modifier);
+
+    const preview = page.getByRole('region', { name: 'Markdown 预览', exact: true });
+    const previewCode = preview.locator('p > code').first();
+    await previewCode.hover();
+    await page.keyboard.down(modifier);
+    await expect(previewCode).toHaveCSS('color', 'rgb(154, 52, 18)');
+    await expect(previewCode).toHaveCSS('font-weight', '600');
+    await expect(previewCode).toHaveCSS('cursor', 'pointer');
+    await previewCode.click();
+    await page.keyboard.up(modifier);
+    await expect(tooltip).toHaveText('已复制');
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('preview  value & <tag>');
+    await page.screenshot({ path: 'test-results/inline-code-preview.png' });
+    const originalUrl = page.url();
+    // Ctrl is also accepted, and inline code inside a link copies instead of opening it.
+    await preview.locator('a > code').dispatchEvent('click', { ctrlKey: true, button: 0 });
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('link-value');
+    expect(page.url()).toBe(originalUrl);
+    expect(context.pages()).toHaveLength(1);
+    await descriptionFrame.locator('a > code').dispatchEvent('click', { metaKey: true, button: 0 });
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('description-link');
+    await expect(disclosure).toHaveClass(/collapsed/);
+    expect(context.pages()).toHaveLength(1);
+    await page.evaluate(() => navigator.clipboard.writeText('keep-code-block-copy'));
+    const blockCode = preview.locator('pre code');
+    await blockCode.dispatchEvent('click', { metaKey: true, button: 0 });
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('keep-code-block-copy');
+    await page.keyboard.down(modifier);
+    await blockCode.hover();
+    expect(await blockCode.evaluate(el => getComputedStyle(el).cursor)).not.toBe('pointer');
+    await page.keyboard.up(modifier);
+    await page.getByRole('button', { name: '查看源代码' }).click();
+    await expect(tooltip).toHaveCount(0);
+    await expect(page.locator('.code-editor')).toBeVisible();
+    await page.goto('./');
+    await expect(tooltip).toHaveCount(0);
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test('生产 Markdown 预览与源码离线切换，代码块和行内代码可复制', async ({ page, context }) => {
+  test.skip(!production, '验证生产构建与离线缓存');
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('snippet/linux/markdown-preview');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await new Promise<void>(resolve => navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true }));
+  });
+  await context.setOffline(true);
+  await page.reload();
+  const preview = page.getByRole('region', { name: 'Markdown 预览', exact: true });
+  await expect(preview).toBeVisible();
+  await expect(page.locator('.window-dot')).toHaveCount(3);
+  await preview.getByRole('button', { name: '复制代码块 1', exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npm install\nnpm run dev');
+  const inline = preview.locator('td code').first();
+  await inline.click({ modifiers: [await page.evaluate(() => navigator.platform.includes('Mac') ? 'Meta' : 'Control')] });
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('# 项目名称');
+  await page.getByRole('button', { name: '查看源代码' }).click();
+  await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
+  await expect(page.locator('.window-traffic-lights')).toHaveCount(0);
+  await page.getByRole('button', { name: '切换到预览' }).click();
+  await expect(preview).toBeVisible();
 });

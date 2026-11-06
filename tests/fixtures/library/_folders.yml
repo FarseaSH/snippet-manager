@@ -1,0 +1,8 @@
+folders:
+  - python[python]:
+      - http
+      - files:
+          - json
+  - git
+  - linux[bash]
+  - guides

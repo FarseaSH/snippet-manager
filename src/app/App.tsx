@@ -124,7 +124,10 @@ export function App() {
         </div>
       </section>
       <section className="detail-panel">
-        {selected ? <SnippetDetail snippet={selected} initialTab={state.tabPath === selected.path ? state.tab : undefined} notify={notify} /> : <div className="welcome">
+        {selected ? <SnippetDetail snippet={selected} initialTab={state.tabPath === selected.path ? state.tab : undefined} notify={notify} /> : !unknown && pathname.startsWith('/folder') ? <div className="folder-placeholder">
+          <span className="brand-mark" aria-hidden="true"><Braces size={26} strokeWidth={2.2} /></span>
+          <p>点击左侧列表中的代码片段，查看内容</p>
+        </div> : <div className="welcome">
           <div className="welcome-symbol"><Braces size={40} strokeWidth={1.5} /></div>
           <span className="welcome-eyebrow">A LITTLE LIBRARY. A LOT OF POSSIBILITIES.</span>
           <h1>{unknown ? '这个位置没有找到内容' : pathname === '/' ? '好代码，随手可得。' : `浏览 ${folders.get(folder)?.name || '内容库'}`}</h1>

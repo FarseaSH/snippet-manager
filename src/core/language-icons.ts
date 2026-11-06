@@ -6,7 +6,7 @@ import {
   type SimpleIcon,
 } from 'simple-icons';
 
-type LanguageIconData = Pick<SimpleIcon, 'slug' | 'path'> & { stroke?: true };
+type LanguageIconData = Pick<SimpleIcon, 'slug' | 'path'> & { hex?: string; stroke?: true };
 // Lucide Terminal: a flat command prompt without a surrounding frame.
 const terminalIcon: LanguageIconData = { slug: 'terminal', path: 'm4 17 6-6-6-6M12 19h8', stroke: true };
 // A custom $_ prompt, drawn as paths so it stays independent of text fonts.

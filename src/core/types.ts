@@ -1,3 +1,8 @@
+export interface MarkdownPreviewData {
+  html: string;
+  codeBlocks: { code: string; language: string }[];
+}
+
 export interface SubSnippet {
   id: string;
   title: string;
@@ -6,6 +11,7 @@ export interface SubSnippet {
   language: string;
   code: string;
   codeHtml: string;
+  markdownPreview?: MarkdownPreviewData;
 }
 
 export interface Snippet {

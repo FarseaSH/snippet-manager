@@ -6,7 +6,7 @@ import { readLibrary, type ContentBuild } from './content/library.ts';
 import { folderPath, pagePath } from '../src/core/paths.ts';
 
 const mime = (name: string) => ({ '.json': 'application/json; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.pdf': 'application/pdf' }[path.extname(name)] ?? 'application/octet-stream');
-const manifest = (base: string) => JSON.stringify({ id: base, name: 'Snippet Manager', short_name: 'Snippets', description: '查找、阅读、复制你的代码片段，支持离线使用。', lang: 'zh-CN', start_url: base, scope: base, display: 'standalone', theme_color: '#253031', background_color: '#ffffff', icons: [{ src: `${base}icons/icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: `${base}icons/icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: `${base}icons/icon-maskable.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' }] }, null, 2);
+const manifest = (base: string) => JSON.stringify({ id: base, name: 'Snippet Manager', short_name: 'Snippets', description: '查找、阅读、复制你的代码片段，支持离线使用。', lang: 'zh-CN', start_url: base, scope: base, display: 'standalone', theme_color: '#27272a', background_color: '#ffffff', icons: [{ src: `${base}icons/icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: `${base}icons/icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: `${base}icons/icon-maskable.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' }] }, null, 2);
 
 export function contentPlugin(): Plugin {
   let config: ResolvedConfig;
@@ -25,7 +25,7 @@ export function contentPlugin(): Plugin {
       let processed;
       do {
         processed = revision;
-        content = await readLibrary(path.join(config.root, 'snippets'), config.base);
+        content = await readLibrary(path.resolve(process.env.SNIPPETS_DIR || path.join(config.root, 'snippets')), config.base);
       } while (processed !== revision);
       log();
     })().finally(() => { processing = undefined; });
@@ -37,7 +37,7 @@ export function contentPlugin(): Plugin {
     async configureServer(devServer) {
       server = devServer;
       await refresh();
-      const contentRoot = path.join(config.root, 'snippets');
+      const contentRoot = path.resolve(process.env.SNIPPETS_DIR || path.join(config.root, 'snippets'));
       server.watcher.add(contentRoot);
       const onChange = (file: string) => {
         if (file !== contentRoot && !file.startsWith(contentRoot + path.sep)) return;

@@ -18,6 +18,33 @@ async function fixture(files: Record<string, string>) {
 }
 
 describe('Markdown 产品规则', () => {
+  it.each(['markdown', 'md', 'MD'])('为 %s 代码块生成安全预览，保留可复制代码原文', async language => {
+    const code = '# Preview\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n- [x] Done\n\n> ```python\n> def hello():\n>     return "<safe>"\n> ```\n\n<script>alert(1)</script>\n\n[unsafe](javascript:alert(1))';
+    const result = await parseSnippet(front + '````' + language + '\n' + code + '\n````', 'preview.md');
+    const sub = result.subSnippets[0];
+    expect(sub.code).toBe(code);
+    expect(sub.markdownPreview?.html).toContain('<h1>Preview</h1>');
+    expect(sub.markdownPreview?.html).toContain('<table>');
+    expect(sub.markdownPreview?.html).toContain('type="checkbox"');
+    expect(sub.markdownPreview?.html).toContain('data-preview-copy="0"');
+    expect(sub.markdownPreview?.html).toContain('data-language-icon="python" fill="#3776AB"');
+    expect(sub.markdownPreview?.html).toContain('color:#8959A8');
+    expect(sub.markdownPreview?.html).not.toContain('<script>');
+    expect(sub.markdownPreview?.html).not.toContain('href="javascript:');
+    expect(sub.markdownPreview?.codeBlocks).toEqual([{ code: 'def hello():\n    return "<safe>"', language: 'python' }]);
+  });
+
+  it('预览代码块显示语言和包含空行的行号，未知语言与无标记代码可阅读', async () => {
+    const code = '```custom-lang\none\n\nthree\n```\n\n```\nplain\n```';
+    const result = await parseSnippet(front + '````md\n' + code + '\n````', 'lines.md');
+    const preview = result.subSnippets[0].markdownPreview!;
+    expect(preview.html).toContain('class="preview-code-language">custom-lang</span>');
+    expect(preview.html).toContain('class="preview-code-language">Plain Text</span>');
+    expect(preview.html.match(/data-language-icon="fallback"/g)).toHaveLength(2);
+    expect(preview.html).toContain('class="preview-line-numbers" aria-hidden="true"><span>1</span><span>2</span><span>3</span>');
+    expect(preview.codeBlocks).toEqual([{ code: 'one\n\nthree', language: 'custom-lang' }, { code: 'plain', language: 'text' }]);
+  });
+
   it('摘要 Logo 跟随代码块语言，支持别名，未知语言使用默认图标', async () => {
     const result = await parseSnippet(front + '# JavaScript\n\n```py\nprint(1)\n```\n\n# Python\n\n```js\nconsole.log(2)\n```\n\n# Unknown\n\n```custom\nthree\n```', 'logos.md');
     expect(result.descriptionHtml.match(/data-language-icon="([^"]+)"/g)).toEqual([

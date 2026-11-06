@@ -5,10 +5,12 @@ import remarkRehype from 'remark-rehype';
 import rehypeSanitize from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
 import { parse as parseYaml } from 'yaml';
-import { codeToHtml, bundledLanguages } from 'shiki';
+import { codeToHtml, codeToHast, bundledLanguages } from 'shiki';
+import tomorrowTheme from '../../src/core/tomorrow.json' with { type: 'json' };
 import { getLanguageIcon } from '../../src/core/language-icons.ts';
 import type { Root, RootContent, Code } from 'mdast';
-import type { Snippet, SubSnippet, Diagnostic } from '../../src/core/types.ts';
+import type { Element, Root as HastRoot, RootContent as HastContent } from 'hast';
+import type { Snippet, SubSnippet, Diagnostic, MarkdownPreviewData } from '../../src/core/types.ts';
 
 type Part = { sub: SubSnippet; nodes: RootContent[] };
 type Retained = { order: number; nodes: RootContent[] };
@@ -26,7 +28,7 @@ function previewText(node: unknown): string {
   return value.value ?? value.alt ?? value.children?.map(previewText).join(' ') ?? '';
 }
 
-async function render(nodes: RootContent[], resolve: ResolveLink): Promise<string> {
+async function render(nodes: RootContent[], resolve: ResolveLink, codeBlocks?: MarkdownPreviewData['codeBlocks']): Promise<string> {
   const tree = structuredClone({ type: 'root', children: nodes }) as Root;
   function visit(node: any) {
     if (node.type === 'html') node.type = 'text';
@@ -37,13 +39,77 @@ async function render(nodes: RootContent[], resolve: ResolveLink): Promise<strin
   }
   visit(tree);
   const processor = unified().use(remarkRehype).use(rehypeSanitize).use(rehypeStringify);
-  return processor.stringify(await processor.run(tree));
+  const result = await processor.run(tree);
+  if (codeBlocks) {
+    const blocks = codeBlocks;
+    let index = 0;
+    async function highlightBlocks(parent: HastRoot | Element) {
+      for (let childIndex = 0; childIndex < parent.children.length; childIndex++) {
+        const child = parent.children[childIndex];
+        if (child.type !== 'element') continue;
+        if (child.tagName === 'pre' && child.children[0]?.type === 'element' && child.children[0].tagName === 'code') {
+          const blockIndex = index++;
+          const block = blocks[blockIndex];
+          const highlighted = await codeToHast(block.code, highlightOptions(block.language));
+          const icon = getLanguageIcon(block.language);
+          parent.children[childIndex] = {
+            type: 'element', tagName: 'div', properties: { className: ['preview-code-block'] },
+            children: [
+              { type: 'element', tagName: 'div', properties: { className: ['preview-code-header'] }, children: [
+                { type: 'element', tagName: 'svg', properties: {
+                  className: ['preview-code-icon'], width: 14, height: 14, viewBox: '0 0 24 24', ariaHidden: 'true', focusable: 'false', dataLanguageIcon: icon?.slug ?? 'fallback',
+                  fill: !icon || icon.stroke ? 'none' : icon.hex ? `#${icon.hex}` : 'currentColor',
+                  ...(!icon || icon.stroke ? { stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } : {}),
+                }, children: [{ type: 'element', tagName: 'path', properties: { d: icon?.path ?? 'm16 18 6-6-6-6M8 6l-6 6 6 6m6-16-4 20' }, children: [] }] },
+                { type: 'element', tagName: 'span', properties: { className: ['preview-code-language'] }, children: [{ type: 'text', value: block.language === 'text' ? 'Plain Text' : block.language }] },
+              ] },
+              {
+                type: 'element', tagName: 'button', properties: { type: 'button', className: ['preview-copy'], dataPreviewCopy: String(blockIndex), ariaLabel: `复制代码块 ${blockIndex + 1}`, title: '复制代码' },
+                children: [
+                  { type: 'element', tagName: 'svg', properties: { className: ['preview-copy-icon'], width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', ariaHidden: 'true' }, children: [
+                    { type: 'element', tagName: 'rect', properties: { x: 9, y: 9, width: 13, height: 13, rx: 2 }, children: [] },
+                    { type: 'element', tagName: 'path', properties: { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }, children: [] },
+                  ] },
+                  { type: 'element', tagName: 'svg', properties: { className: ['preview-copy-check'], width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', ariaHidden: 'true' }, children: [
+                    { type: 'element', tagName: 'path', properties: { d: 'm20 6-11 11-5-5' }, children: [] },
+                  ] },
+                ],
+              },
+              { type: 'element', tagName: 'div', properties: { className: ['preview-code-body'] }, children: [
+                { type: 'element', tagName: 'div', properties: { className: ['preview-line-numbers'], ariaHidden: 'true' }, children: block.code.split('\n').map((_, lineIndex) => ({
+                  type: 'element', tagName: 'span', properties: {}, children: [{ type: 'text', value: String(lineIndex + 1) }],
+                })) },
+                ...highlighted.children as HastContent[],
+              ] },
+            ],
+          } as Element;
+        } else await highlightBlocks(child);
+      }
+    }
+    await highlightBlocks(result);
+  }
+  return processor.stringify(result);
+}
+
+function highlightOptions(language: string) {
+  const aliases: Record<string, string> = { shell: 'bash', sh: 'bash', js: 'javascript', ts: 'typescript', py: 'python', yml: 'yaml', md: 'markdown' };
+  const lang = aliases[language.trim().toLowerCase()] ?? language.trim().toLowerCase();
+  return { lang: Object.hasOwn(bundledLanguages, lang) ? lang as keyof typeof bundledLanguages : 'text', theme: { ...tomorrowTheme, type: 'light' as const } };
 }
 
 async function highlighted(code: string, language: string): Promise<string> {
-  const aliases: Record<string, string> = { shell: 'bash', sh: 'bash', js: 'javascript', ts: 'typescript', py: 'python', yml: 'yaml' };
-  const lang = aliases[language.toLowerCase()] ?? language.toLowerCase();
-  return codeToHtml(code, { lang: Object.hasOwn(bundledLanguages, lang) ? lang as keyof typeof bundledLanguages : 'text', theme: 'github-light' });
+  return codeToHtml(code, highlightOptions(language));
+}
+
+async function markdownPreview(code: string, resolve: ResolveLink): Promise<MarkdownPreviewData> {
+  const tree = unified().use(remarkParse).use(remarkGfm).parse(code) as Root;
+  const codeBlocks: MarkdownPreviewData['codeBlocks'] = [];
+  function collect(node: Root | RootContent) {
+    if (node.type === 'code') codeBlocks.push({ code: node.value, language: node.lang || 'text' });
+    if ('children' in node) node.children.forEach(child => collect(child as RootContent));
+  }
+  collect(tree);
+  return { html: await render(tree.children, resolve, codeBlocks), codeBlocks };
 }
 
 export function validateMetadata(raw: string): { body: string; name: string; tags: string[] } {
@@ -91,6 +157,7 @@ export async function parseSnippet(raw: string, path: string, diagnostics: Diagn
   for (const part of parts) {
     part.sub.sourceDescription = source(part.nodes);
     part.sub.codeHtml = await highlighted(part.sub.code, part.sub.language);
+    if (['md', 'markdown'].includes(part.sub.language.trim().toLowerCase())) part.sub.markdownPreview = await markdownPreview(part.sub.code, resolve);
   }
   if (parts.length) for (const item of retained) diagnostics.push({ level: 'warning', path, message: `一级标题“${plainText(item.nodes[0])}”没有关联代码块，已保留正文` });
   let descriptionHtml = '';
@@ -109,7 +176,7 @@ export async function parseSnippet(raw: string, path: string, diagnostics: Diagn
         else {
           const languageIcon = getLanguageIcon(item.part.sub.language);
           const logo = languageIcon
-            ? `<svg width="16" height="16" viewBox="0 0 24 24" ${languageIcon.stroke ? 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"' : 'fill="currentColor"'} data-language-icon="${languageIcon.slug}"><path d="${languageIcon.path}" /></svg>`
+            ? `<svg width="16" height="16" viewBox="0 0 24 24" ${languageIcon.stroke ? 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"' : `fill="${languageIcon.hex ? `#${languageIcon.hex}` : 'currentColor'}"`} data-language-icon="${languageIcon.slug}"><path d="${languageIcon.path}" /></svg>`
             : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-language-icon="fallback"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/><path d="m14 2-4 20"/></svg>';
           const icon = `<span class="sub-summary-icon" aria-hidden="true">${logo}</span>`;
           const name = `<button type="button" class="summary-tab" data-tab-id="${item.part.sub.id}">${icon}<span class="summary-tab-name">${escape(item.part.sub.title)}</span></button>`;

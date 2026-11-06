@@ -1,3 +1,4 @@
+import tomorrowTheme from '../../core/tomorrow.json' with { type: 'json' };
 import * as monaco from 'monaco-editor/editor/editor.api.js';
 import 'monaco-editor/features/codicon/register.js';
 import 'monaco-editor/editor/browser/coreCommands.js';
@@ -18,26 +19,45 @@ self.MonacoEnvironment = {
   getWorker(_moduleId, label) { return label === 'json' ? new JsonWorker() : new EditorWorker(); },
 };
 jsonDefaults.setDiagnosticsOptions({ validate: false });
-const codeSurface = getComputedStyle(document.documentElement).getPropertyValue('--code-surface').trim() || '#f8f9fa';
-
-monaco.editor.defineTheme('snippet-light', {
-  base: 'vs', inherit: true,
+// Original Tomorrow palette: https://github.com/chriskempson/tomorrow-theme
+// TextMate scopes are retained for compatibility; Monarch tokens use the same palette.
+monaco.editor.defineTheme('tomorrow', {
+  base: 'vs', inherit: false,
   rules: [
-    { token: 'comment', foreground: '536e72' },
-    { token: 'keyword', foreground: '9c3454' },
-    { token: 'string', foreground: '315659' },
-    { token: 'number', foreground: '2978a0' },
+    { token: '', foreground: '4D4D4C', background: 'FFFFFF' },
+    ...tomorrowTheme.tokenColors.flatMap(rule => rule.scope.split(', ').map(token => ({
+      token, ...rule.settings,
+      foreground: rule.settings.foreground?.replace('#', ''),
+      background: rule.settings.background?.replace('#', ''),
+    }))),
+    { token: 'comment', foreground: '8E908C' },
+    { token: 'keyword', foreground: '8959A8' },
+    { token: 'keyword.operator', foreground: '3E999F' },
+    { token: 'operator', foreground: '3E999F' },
+    { token: 'delimiter', foreground: '4D4D4C' },
+    { token: 'identifier', foreground: '4D4D4C' },
+    { token: 'type', foreground: 'C99E00' },
+    { token: 'type.identifier', foreground: 'C99E00' },
+    { token: 'number', foreground: 'F5871F' },
+    { token: 'constant', foreground: 'F5871F' },
+    { token: 'string', foreground: '718C00' },
+    { token: 'string.escape', foreground: 'F5871F' },
+    { token: 'regexp', foreground: 'C82829' },
+    { token: 'tag', foreground: 'C82829' },
+    { token: 'attribute.name', foreground: 'C82829' },
+    { token: 'attribute.value', foreground: '718C00' },
+    { token: 'variable', foreground: 'C82829' },
+    { token: 'function', foreground: '4271AE' },
   ],
   colors: {
-    'editor.background': codeSurface, 'editor.foreground': '#253031',
-    'editorLineNumber.foreground': '#536e72', 'editorLineNumber.activeForeground': '#2978a0',
-    'editorGutter.background': codeSurface, 'editor.selectionBackground': '#c6e0ff',
-    'editorStickyScroll.background': codeSurface, 'editorOverviewRuler.background': codeSurface,
-    'editor.inactiveSelectionBackground': '#c6e0ff80', 'editor.lineHighlightBackground': '#f5f9ff',
-    'editor.lineHighlightBorder': '#ffffff00', 'editorCursor.foreground': '#2978a0',
-    'editorIndentGuide.background1': '#d4e0e7', 'editorIndentGuide.activeBackground1': '#8eb7ca',
-    'editorWidget.background': '#f5f9ff', 'editorWidget.border': '#d4e0e7',
-    'editorBracketMatch.background': '#c6e0ff80', 'editorBracketMatch.border': '#2978a0',
+    ...tomorrowTheme.colors,
+    'editorLineNumber.foreground': '#8E908C', 'editorLineNumber.activeForeground': '#4D4D4C',
+    'editorGutter.background': '#FFFFFF', 'editorStickyScroll.background': '#FFFFFF',
+    'editorOverviewRuler.background': '#FFFFFF', 'editor.inactiveSelectionBackground': '#D6D6D680',
+    'editor.lineHighlightBorder': '#FFFFFF00',
+    'editorIndentGuide.background1': '#D1D1D1', 'editorIndentGuide.activeBackground1': '#8E908C',
+    'editorWidget.background': '#FFFFFF', 'editorWidget.border': '#D1D1D1',
+    'editorBracketMatch.background': '#EFEFEF', 'editorBracketMatch.border': '#D1D1D1',
   },
 });
 
