@@ -8,9 +8,9 @@ import { LanguageIcon } from './LanguageIcon';
 import { MarkdownPreview } from './MarkdownPreview';
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor';
 
-interface Props { snippet: Snippet; initialTab?: string; notify(message: string): void }
+interface Props { snippet: Snippet; initialTab?: string; showTitle?: boolean; notify(message: string): void }
 
-export function SnippetDetail({ snippet, initialTab, notify }: Props) {
+export function SnippetDetail({ snippet, initialTab, showTitle = true, notify }: Props) {
   const [active, setActive] = useState(initialTab || snippet.subSnippets[0]?.id || '');
   const [showSource, setShowSource] = useState(false);
   const previewRef = useRef<CodeEditorHandle>(null);
@@ -78,7 +78,7 @@ export function SnippetDetail({ snippet, initialTab, notify }: Props) {
   return <div className={`snippet-detail-layout ${focused ? 'code-focused' : ''}`}>
     <div className="snippet-detail-scroll">
     <article className="snippet-detail" aria-label="片段详情">
-    <div className="detail-title-row"><h1>{snippet.name}</h1><div className="snippet-actions" role="group" aria-label="片段操作">
+    <div className="detail-title-row">{showTitle && <h1>{snippet.name}</h1>}<div className="snippet-actions" role="group" aria-label="片段操作">
       <button onClick={() => void copy(absolute(pagePath(snippet.path)), '页面链接已复制')}><Link size={14} />复制页面链接</button>
       <button onClick={() => void copy(absolute(`/raw/${encodePath(snippet.path)}`), 'Markdown 地址已复制')}><FileCode2 size={14} />复制 Markdown URL</button>
       <button onClick={() => void copy(snippet.raw, '完整 Markdown 已复制')}><FileText size={14} />复制 Markdown</button>

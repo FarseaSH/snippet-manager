@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import { generateSW } from 'workbox-build';
 import { readLibrary, type ContentBuild } from './content/library.ts';
-import { folderPath, pagePath } from '../src/core/paths.ts';
+import { folderPath, pagePath, SETTINGS_PATH } from '../src/core/paths.ts';
 
 const mime = (name: string) => ({ '.json': 'application/json; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.pdf': 'application/pdf' }[path.extname(name)] ?? 'application/octet-stream');
 const manifest = (base: string) => JSON.stringify({ id: base, name: 'Snippet Manager', short_name: 'Snippets', description: '查找、阅读、复制你的代码片段，支持离线使用。', lang: 'zh-CN', start_url: base, scope: base, display: 'standalone', theme_color: '#27272a', background_color: '#ffffff', icons: [{ src: `${base}icons/icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: `${base}icons/icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: `${base}icons/icon-maskable.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' }] }, null, 2);
@@ -107,7 +107,7 @@ export function contentPlugin(): Plugin {
       if (config.command !== 'build' || !content) return;
       const out = path.resolve(config.root, config.build.outDir);
       const shell = await fs.readFile(path.join(out, 'index.html'));
-      const routes = content.library.snippets.map(snippet => pagePath(snippet.path));
+      const routes = [SETTINGS_PATH, ...content.library.snippets.map(snippet => pagePath(snippet.path))];
       const visit = (folder: ContentBuild['library']['folders']) => { routes.push(folderPath(folder.path)); folder.children.forEach(visit); };
       visit(content.library.folders);
       for (const route of routes) {
@@ -122,7 +122,7 @@ export function contentPlugin(): Plugin {
         globIgnores: ['sw.js', 'workbox-*.js', '404.html'], swDest: path.join(out, 'sw.js'),
         maximumFileSizeToCacheInBytes: Number.MAX_SAFE_INTEGER,
         modifyURLPrefix: { '': config.base }, navigateFallback: `${config.base}index.html`,
-        navigateFallbackAllowlist: [new RegExp(`^${base}(?:$|(?:snippet|folder)(?:/|$))`)],
+        navigateFallbackAllowlist: [new RegExp(`^${base}(?:$|${SETTINGS_PATH.slice(1)}/?$|(?:snippet|folder)(?:/|$))`)],
         clientsClaim: true, skipWaiting: false, cleanupOutdatedCaches: true, mode: 'production',
       });
       result.warnings.forEach(warning => config.logger.warn(warning));

@@ -8,9 +8,9 @@ export function FolderTree({ root, selected, expanded, onExpand, onSelect }: Pro
   function row(folder: Folder, depth: number) {
     const open = expanded.has(folder.path);
     return <li key={folder.path}>
-      <div className={`folder-row ${selected === folder.path ? 'selected' : ''}`} data-folder-path={folder.path} style={{ paddingLeft: 10 + depth * 16 }}>
+      <div className={`folder-row ${selected === folder.path ? 'selected' : ''}`} data-folder-path={folder.path} style={{ paddingInlineStart: `min(calc(6px + ${depth} * var(--folder-indent, 16px)), 32%)` }}>
         {folder.children.length ? <button className="tree-toggle" aria-label={`${open ? '收起' : '展开'} ${folder.name}`} aria-expanded={open} onClick={() => onExpand(folder.path)}>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</button> : <span className="tree-spacer" />}
-        <button className="folder-select" onClick={() => onSelect(folder.path)} aria-current={selected === folder.path ? 'page' : undefined}>
+        <button className="folder-select" title={folder.name} onClick={() => onSelect(folder.path)} aria-current={selected === folder.path ? 'page' : undefined}>
           <FolderIcon icon={folder.icon} /><span>{folder.name}</span><span className="folder-count">{folder.count}</span>
         </button>
       </div>
@@ -18,8 +18,9 @@ export function FolderTree({ root, selected, expanded, onExpand, onSelect }: Pro
     </li>;
   }
   return <nav aria-label="文件夹导航" className="folder-tree">
+    <div className="sidebar-label">个人收藏</div>
     <button className={`all-folder ${selected === '' ? 'selected' : ''}`} aria-current={selected === '' ? 'page' : undefined} onClick={() => onSelect('')}><Library size={17} /><span>全部片段</span><span className="folder-count">{root.count}</span></button>
-    <div className="sidebar-label">文件夹 <span>{root.children.length}</span></div>
+    <div className="sidebar-label">文件夹</div>
     <ul>{root.children.map(folder => row(folder, 0))}</ul>
     {!root.count && <p className="folder-help">在 snippets/ 中添加 Markdown，即可建立你的内容库。</p>}
   </nav>;

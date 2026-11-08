@@ -43,19 +43,18 @@ test('目录图标继承与覆盖，列表路径和窄屏入口一致，配置�
     await expect(deep.locator('.snippet-folder [data-language-icon]')).toHaveAttribute('data-language-icon', 'javascript');
     await page.getByRole('button', { name: '清空搜索' }).click();
     await page.setViewportSize({ width: 900, height: 850 });
-    await expect(page.locator('.folder-picker-button [data-language-icon]')).toHaveAttribute('data-language-icon', 'python');
-    await page.locator('.folder-picker-button').click();
-    await page.locator(`#folder-picker [data-folder-path="${prefix}/scripts"] .folder-select`).click();
-    await expect(page.locator('.folder-picker-button [data-language-icon]')).toHaveAttribute('data-language-icon', 'javascript');
+    await expect(page.locator('.sidebar [aria-current="page"] [data-language-icon]')).toHaveAttribute('data-language-icon', 'python');
+    await scriptRow.locator('.folder-select').click();
+    await expect(page.locator('.sidebar [aria-current="page"] [data-language-icon]')).toHaveAttribute('data-language-icon', 'javascript');
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator('.mobile-subfolders button').filter({ hasText: 'deep' }).locator('[data-language-icon]')).toHaveAttribute('data-language-icon', 'javascript');
-    await expect(page.locator('.mobile-subfolders button').filter({ hasText: 'json' }).locator('[data-language-icon]')).toHaveAttribute('data-language-icon', 'json');
+    await expect(page.locator(`.sidebar [data-folder-path="${prefix}/scripts/deep"] [data-language-icon]`)).toHaveAttribute('data-language-icon', 'javascript');
+    await expect(page.locator(`.sidebar [data-folder-path="${prefix}/scripts/json"] [data-language-icon]`)).toHaveAttribute('data-language-icon', 'json');
     delete rule[`${prefix}[py]`];
     rule[prefix] = childRules;
     childRules[0] = { scripts: ['json[json]'] };
     await fs.writeFile(configFile, stringifyYaml(configuration));
     await expect(deep.locator('.snippet-folder [data-folder-icon="default"]')).toBeVisible();
-    await expect(page.locator('.folder-picker-button [data-folder-icon="default"]')).toBeVisible();
+    await expect(page.locator('.sidebar [aria-current="page"] [data-folder-icon="default"]')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
   } finally {
@@ -109,6 +108,7 @@ test('Monaco 只读编辑器支持精确复制与查找，切换代码和窄屏�
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('snippet/python/http/requests');
+  await expect(page.locator('.detail-title-row h1')).toHaveText('Python Requests');
   await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
   const source = await readEditorCode(page);
   expect(source).toContain('    params={"page": 1, "limit": 20},');
@@ -212,9 +212,23 @@ test('子片段按语言显示 Logo，未知与缺失类型保留默认图标', 
   } finally { await fs.rm(file, { force: true }); }
 });
 
-test('品牌位于左栏，搜索位于中栏，窄屏搜索保持连续输入', async ({ page }) => {
+test('活动栏位于最左，搜索位于列表栏，窄屏搜索保持连续输入', async ({ page }) => {
   await page.goto('./');
-  await expect(page.locator('.sidebar .brand')).toBeVisible();
+  const brand = page.locator('.sidebar-brand');
+  const logo = page.locator('.activity-home .activity-logo');
+  const activity = page.locator('.activity-bar');
+  await expect(brand).toHaveText('Snippet Manager');
+  await expect(brand).toHaveCSS('border-bottom-width', '0px');
+  await expect(activity).toHaveCSS('background-color', 'rgb(242, 76, 0)');
+  await expect(activity).toHaveCSS('border-right-width', '0px');
+  await expect(activity).toHaveCSS('border-radius', '14px 0px 0px 14px');
+  await expect(logo).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(logo).toHaveCSS('color', 'rgb(242, 76, 0)');
+  await expect(logo).toHaveCSS('border-radius', '50%');
+  await expect(logo).toHaveCSS('width', '36px');
+  await expect(logo).toHaveCSS('height', '36px');
+  await expect(logo.locator('path').last()).toHaveCSS('stroke', 'rgb(251, 146, 60)');
+  await expect(page.locator('.sidebar')).toHaveCSS('background-color', 'rgb(245, 245, 245)');
   await expect(page.locator('.snippet-panel .global-search')).toBeVisible();
   await expect(page.locator('.app-header')).toHaveCount(0);
   expect((await page.locator('.app-body').boundingBox())!.y).toBe(0);
@@ -224,13 +238,15 @@ test('品牌位于左栏，搜索位于中栏，窄屏搜索保持连续输入',
   await page.keyboard.press('/');
   await expect(page.getByLabel('搜索代码片段')).toBeFocused();
   await page.setViewportSize({ width: 900, height: 850 });
-  await expect(page.locator('.sidebar')).toBeHidden();
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await expect(page.locator('.activity-bar')).toBeVisible();
   await expect(page.locator('.snippet-panel .global-search')).toBeVisible();
   await expect(page.getByLabel('搜索代码片段')).toHaveValue('json=');
   await page.screenshot({ path: 'test-results/tablet.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(activity).toHaveCSS('border-radius', '0px');
   await expect(page.getByLabel('搜索代码片段')).toHaveCount(1);
-  await expect(page.locator('.mobile-controls .global-search')).toBeVisible();
+  await expect(page.locator('.snippet-panel .global-search')).toBeVisible();
   await page.goto('./');
   await page.getByLabel('搜索代码片段').click();
   await page.keyboard.type('ssh proxy');
@@ -240,11 +256,125 @@ test('品牌位于左栏，搜索位于中栏，窄屏搜索保持连续输入',
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test('活动栏切换全库和设置，路径栏品牌返回首页', async ({ page }) => {
+  await page.goto('folder/python');
+  const activity = page.getByRole('navigation', { name: '活动栏' });
+  const logo = activity.getByRole('button', { name: '首页' });
+  const home = page.locator('.sidebar').getByRole('button', { name: 'Snippet Manager 首页' });
+  const library = activity.getByRole('button', { name: '全部片段' });
+  const settings = activity.getByRole('button', { name: '设置' });
+  await expect(activity.locator('[aria-current]')).toHaveCount(0);
+  await expect(activity.getByRole('button')).toHaveCount(3);
+  await expect(page.locator('.sidebar .all-folder')).toBeVisible();
+  const rail = (await activity.boundingBox())!;
+  expect(rail.x).toBe(0);
+  expect(rail.width).toBe(56);
+  const desktopLogo = (await logo.boundingBox())!;
+  expect(desktopLogo.y - rail.y).toBe(12);
+  expect((await library.boundingBox())!.y - desktopLogo.y - desktopLogo.height).toBe(12);
+  await expect(library.locator('.lucide-file-text')).toBeVisible();
+  expect((await settings.boundingBox())!.y).toBeGreaterThan((await library.boundingBox())!.y);
+
+  await page.getByLabel('搜索代码片段').fill('ssh proxy');
+  await expect(page.locator('.snippet-item')).toHaveCount(1);
+  await library.click();
+  await expect(page).toHaveURL(/\/folder$/);
+  await expect(page.getByLabel('搜索代码片段')).toHaveValue('');
+  await expect(page.locator('.snippet-item')).toHaveCount(8);
+  await page.locator('.snippet-item').first().click();
+  await expect(page.locator('.sidebar .all-folder')).toHaveAttribute('aria-current', 'page');
+
+  await settings.click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.reload();
+  const settingsPage = page.getByRole('main', { name: '设置' });
+  await expect(settingsPage).toBeVisible();
+  await expect(settingsPage.locator('*')).toHaveCount(0);
+  await expect(activity.locator('[aria-current]')).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(activity).toHaveCSS('width', '390px');
+  const mobileLogo = (await logo.boundingBox())!;
+  const mobileLibrary = (await library.boundingBox())!;
+  const mobileSettings = (await settings.boundingBox())!;
+  expect(mobileLogo.y).toBe(mobileLibrary.y);
+  expect(mobileSettings.y).toBe(mobileLibrary.y);
+  expect(mobileLogo.x).toBe(12);
+  expect(mobileLibrary.x - mobileLogo.x - mobileLogo.width).toBe(12);
+  expect(mobileSettings.x).toBeGreaterThan(mobileLibrary.x);
+  await expect(settingsPage).toBeVisible();
+  await expect(page.getByLabel('搜索代码片段')).toHaveCount(0);
+  await logo.click();
+  await expect(page).toHaveURL(test.info().project.use.baseURL!);
+  await library.click();
+  await expect(page).toHaveURL(/\/folder$/);
+  await home.click();
+  await expect(page).toHaveURL(test.info().project.use.baseURL!);
+  await expect(page.locator('.snippet-item')).toHaveCount(8);
+  await expect(page.getByRole('dialog', { name: '片段详情' })).toHaveCount(0);
+});
+
+test('桌面分隔线调整相邻栏宽，限制正文最小宽度并记住设置', async ({ page }) => {
+  await page.goto('snippet/python/http/requests');
+  const sidebar = page.getByRole('separator', { name: '调整文件夹侧栏宽度' });
+  const list = page.getByRole('separator', { name: '调整片段列表宽度' });
+  const detail = page.locator('.detail-region');
+  const drag = async (handle: typeof sidebar, distance: number) => {
+    const { x, y, width, height } = (await handle.boundingBox())!;
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x + width / 2 + distance, y + height / 2, { steps: 5 });
+    await page.mouse.up();
+  };
+  await expect(sidebar).toHaveAttribute('aria-valuenow', '232');
+  const originalDetail = await detail.boundingBox();
+  await drag(sidebar, 64);
+  await expect(page.locator('.sidebar')).toHaveCSS('width', '296px');
+  await expect(page.locator('.snippet-panel')).toHaveCSS('width', '254px');
+  expect(await detail.boundingBox()).toEqual(originalDetail);
+
+  await drag(list, 650);
+  await expect(page.locator('.sidebar')).toHaveCSS('width', '296px');
+  await expect(detail).toHaveCSS('width', '400px');
+  await list.press('ArrowLeft');
+  await expect(detail).toHaveCSS('width', '416px');
+  await page.reload();
+  await expect(page.locator('.sidebar')).toHaveCSS('width', '296px');
+  await expect(detail).toHaveCSS('width', '416px');
+  await page.setViewportSize({ width: 1101, height: 800 });
+  await expect(detail).toHaveCSS('width', '400px');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(detail).toHaveCSS('width', '416px');
+});
+
+test('手机浏览时可调整侧栏，打开抽屉后正文占满屏幕', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('folder/python');
+  const sidebar = page.getByRole('separator', { name: '调整文件夹侧栏宽度' });
+  await expect(sidebar).toHaveAttribute('aria-valuenow', '133');
+  const { x, y, width, height } = (await sidebar.boundingBox())!;
+  const point = { x: Math.round(x + width / 2), y: Math.round(y + height / 2) };
+  const touch = await page.context().newCDPSession(page);
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: point.x + 100, y: point.y }] });
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await touch.detach();
+  await expect(page.locator('.sidebar')).toHaveCSS('width', '210px');
+  await expect(page.locator('.snippet-panel')).toHaveCSS('width', '180px');
+  await page.locator('.snippet-item').filter({ hasText: 'Python Requests' }).click();
+  await expect(sidebar).toHaveCount(0);
+  const drawer = page.getByRole('dialog', { name: '片段详情' });
+  await expect(drawer).toHaveCSS('width', '390px');
+  await drawer.getByRole('button', { name: '返回', exact: true }).click();
+  await expect(page.locator('.sidebar')).toHaveCSS('width', '210px');
+});
+
 test('目录递归、搜索定位与 Tab 说明保持不变', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('./');
-  await expect(page.getByRole('heading', { name: '好代码，随手可得。' })).toBeVisible();
+  await expect(page.locator('.folder-placeholder')).toBeVisible();
+  await expect(page.locator('.folder-placeholder')).toHaveText('点击左侧列表中的代码片段，查看内容');
   await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^python/ }).click();
   await expect(page.locator('.snippet-item')).toHaveCount(3);
   await expect(page.locator('.folder-placeholder')).toHaveText('点击左侧列表中的代码片段，查看内容');
@@ -281,7 +411,7 @@ test('目录递归、搜索定位与 Tab 说明保持不变', async ({ page }) =
   await expect(page.locator('.markdown')).toBeVisible();
   await page.getByRole('button', { name: '清空搜索' }).click();
   await expect(page.locator('.list-title')).toHaveCount(0);
-  await expect(page.locator('.list-header.folder-mode')).toBeHidden();
+  await expect(page.locator('.list-header')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -358,17 +488,26 @@ test('说明整框展开、仅按钮收起，键盘可操作，短说明完整�
     await expect(frame.locator('.description-actions')).toHaveCount(0);
     // Text expands the frame, but cannot collapse it once expanded.
     await frame.locator('.markdown > p').first().click();
-    await expect(frame.getByRole('button', { name: '收起说明' })).toHaveAttribute('aria-expanded', 'true');
+    const collapse = frame.getByRole('button', { name: '收起说明' });
+    await expect(collapse).toHaveAttribute('aria-expanded', 'true');
+    await expect(collapse).toHaveText('收起');
+    const collapseArrow = collapse.locator('.description-collapse-arrow');
+    await expect(collapseArrow).toBeVisible();
     await expect(hint).toHaveCount(0);
-    await expect(frame.locator('.description-collapse-arrow')).toBeVisible();
     await frame.screenshot({ path: 'test-results/description-expanded-desktop.png' });
+    await expect(collapse).toHaveCSS('color', 'rgb(82, 82, 91)');
+    await collapse.hover();
+    await expect(collapse).toHaveCSS('color', 'rgb(194, 65, 12)');
+    await expect(collapseArrow).toHaveCSS('color', 'rgb(194, 65, 12)');
+    await expect(collapse).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(collapse).toHaveCSS('border-top-width', '0px');
     expect(await viewport.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(previewHeight);
     await frame.locator('.markdown > p').first().click();
     await frame.click({ position: { x: 8, y: 8 } });
     await expect(viewport).not.toHaveClass(/collapsed/);
     await frame.getByRole('button', { name: '收起说明' }).click();
     await expect(viewport).toHaveClass(/collapsed/);
-    await expect(frame.locator('.description-collapse-arrow')).toHaveCount(0);
+    await expect(collapse).toHaveCount(0);
     const disclosure = frame.getByRole('button', { name: '展开说明' });
     await disclosure.focus();
     await page.keyboard.press('Enter');
@@ -392,17 +531,16 @@ test('说明整框展开、仅按钮收起，键盘可操作，短说明完整�
     expect(await viewport.evaluate(el => el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight))).toBeCloseTo(5, 1);
     await frame.screenshot({ path: 'test-results/description-glass-mobile.png' });
     await page.locator('.description').click({ position: { x: 8, y: 8 } });
-    await expect(frame.locator('.description-collapse-arrow')).toBeVisible();
+    await expect(collapse).toBeVisible();
     await frame.screenshot({ path: 'test-results/description-expanded-mobile.png' });
     await frame.click({ position: { x: 8, y: 8 } });
     await expect(viewport).not.toHaveClass(/collapsed/);
-    const collapse = frame.getByRole('button', { name: '收起说明' });
     await expect(collapse).toBeInViewport();
     await collapse.click();
     await expect(viewport).toHaveClass(/collapsed/);
     await page.goto(`snippet/${prefix}/short`);
     await expect(page.locator('.markdown')).toContainText('不需要安装额外依赖');
-    await expect(page.locator('.description-disclosure, .description-overflow-hint, .description-collapse-arrow')).toHaveCount(0);
+    await expect(page.locator('.description-disclosure, .description-overflow-hint')).toHaveCount(0);
     await page.locator('.description').click({ position: { x: 8, y: 8 } });
     await expect(viewport).not.toHaveClass(/collapsed/);
     await page.goto(`snippet/${prefix}/long`);
@@ -536,18 +674,20 @@ test('浏览器历史与首页恢复，明确链接优先', async ({ page }) => 
 });
 
 test('打开片段保留全部或父目录列表，历史与移动端返回保留来源范围', async ({ page }) => {
-  for (const [route, count, label] of [['folder', 8, '内容库根目录'], ['folder/python', 3, 'python']] as const) {
+  for (const [route, count, label] of [['folder', 8, '全部片段'], ['folder/python', 3, 'python']] as const) {
     await page.goto(route);
     await expect(page.locator('.snippet-item')).toHaveCount(count);
     const names = await page.locator('.snippet-item-title strong').allTextContents();
-    const folderSelection = await page.locator('.sidebar [aria-current="page"]').innerText();
+    const folderSelection = page.locator('.sidebar [aria-current="page"]');
+    const selectedFolders = await folderSelection.allTextContents();
+    expect(selectedFolders).toHaveLength(1);
     for (const name of ['Format JSON', 'Python Requests']) {
       await page.locator('.snippet-item').filter({ hasText: name }).click();
       await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
       await expect(page.locator('.snippet-item')).toHaveCount(count);
       expect(await page.locator('.snippet-item-title strong').allTextContents()).toEqual(names);
       await expect(page.locator('.snippet-item.active')).toContainText(name);
-      expect(await page.locator('.sidebar [aria-current="page"]').innerText()).toBe(folderSelection);
+      expect(await folderSelection.allTextContents()).toEqual(selectedFolders);
     }
     await page.goBack();
     await expect(page.getByRole('heading', { name: 'Format JSON', exact: true })).toBeVisible();
@@ -563,57 +703,66 @@ test('打开片段保留全部或父目录列表，历史与移动端返回保�
     await expect(page.locator('.snippet-item')).toHaveCount(count);
     expect(await page.locator('.snippet-item-title strong').allTextContents()).toEqual(names);
     await page.setViewportSize({ width: 900, height: 850 });
-    await expect(page.locator('.folder-picker-button')).toHaveText(label);
+    await expect(folderSelection).toContainText(label);
     await page.setViewportSize({ width: 1440, height: 1000 });
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [route, count, label] of [['folder', 8, '内容库根目录'], ['folder/python', 3, 'python']] as const) {
+  for (const [route, count, label] of [['folder', 8, '全部片段'], ['folder/python', 3, 'python']] as const) {
     await page.goto(route);
     await page.locator('.snippet-item').filter({ hasText: 'Format JSON' }).click();
     await expect(page.getByRole('heading', { name: 'Format JSON', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '返回', exact: true }).click();
-    await expect(page.locator('.folder-picker-button')).toHaveText(label);
+    await expect(page.locator('.sidebar [aria-current="page"]')).toContainText(label);
     await expect(page.locator('.snippet-item')).toHaveCount(count);
     await expect(page).toHaveURL(new RegExp(`/${route}$`));
   }
   await page.goto('snippet/python/files/json/format');
   await page.getByRole('button', { name: '返回', exact: true }).click();
-  await expect(page.locator('.folder-picker-button')).toHaveText('python / files / json');
+  await expect(page.locator('.sidebar [data-folder-path="python/files/json"] [aria-current="page"]')).toBeVisible();
   await expect(page.locator('.snippet-item')).toHaveCount(1);
 });
 
-test('宽屏隐藏目录标题栏，窄屏通过当前路径按钮切换文件夹', async ({ page }) => {
+test('桌面、平板和手机通过同一文件夹侧栏切换范围', async ({ page }) => {
   await page.goto('folder/linux');
+  const tree = page.getByRole('navigation', { name: '文件夹导航' });
+  const labels = tree.locator('.sidebar-label');
+  const expectLabelAlignment = async () => {
+    const start = await page.locator('.sidebar-brand').evaluate(el => el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft));
+    expect(await labels.evaluateAll(elements => elements.map(el => el.getBoundingClientRect().left))).toEqual([start, start]);
+  };
   await expect(page.locator('.sidebar')).toBeVisible();
-  await expect(page.locator('.list-header.folder-mode')).toBeHidden();
+  await expect(labels).toHaveText(['个人收藏', '文件夹']);
+  await expect(labels.first()).toHaveCSS('font-size', '11px');
+  await expectLabelAlignment();
+  await expect(page.locator('.list-header')).toHaveCount(0);
   await expect(page.locator('.snippet-item')).toHaveCount(2);
   await page.setViewportSize({ width: 900, height: 850 });
-  await expect(page.locator('.sidebar')).toBeHidden();
-  await expect(page.locator('.folder-picker-button')).toHaveText('linux');
-  await expect(page.locator('.folder-list-count')).toHaveText('2');
-  await expect(page.locator('.list-header > p')).toHaveCount(0);
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await expect(page.locator('.sidebar [aria-current="page"]')).toContainText('linux');
   await page.goto('folder/python/files/json');
-  await expect(page.locator('.folder-picker-button')).toHaveText('python / files / json');
-  await page.locator('.folder-picker-button').click();
-  await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^linux/ }).click();
-  await expect(page.locator('.folder-picker-button')).toHaveText('linux');
-  await expect(page.locator('.folder-picker')).toHaveCount(0);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('.folder-picker-button')).toBeVisible();
-  await page.locator('.folder-picker-button').click();
-  await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^全部片段/ }).click();
-  await expect(page.locator('.folder-picker-button')).toHaveText('内容库根目录');
+  await expect(page.locator('.sidebar [data-folder-path="python/files/json"] [aria-current="page"]')).toBeVisible();
+  await tree.getByRole('button', { name: /^linux/ }).click();
+  await expect(page.locator('.sidebar [aria-current="page"]')).toContainText('linux');
+  await page.setViewportSize({ width: 320, height: 640 });
+  await expectLabelAlignment();
+  await tree.getByRole('button', { name: /^全部片段/ }).click();
+  await expect(page.locator('.sidebar .all-folder')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('.snippet-item')).toHaveCount(8);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: 'test-results/mobile-folder-picker.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/mobile-folder-sidebar.png', fullPage: true });
 });
 
 test('平板文件夹入口与键盘 Tab 导航', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 850 });
   await page.goto('./');
-  await page.getByRole('button', { name: /^选择文件夹：/ }).click();
   await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^python/ }).click();
   await page.locator('.snippet-item').filter({ hasText: 'Python Requests' }).click();
+  const drawer = page.getByRole('dialog', { name: '片段详情' });
+  await expect(drawer.getByRole('button', { name: '返回', exact: true })).toBeFocused();
+  await expect(drawer.locator('.drawer-toolbar h1')).toHaveText('Python Requests');
+  await expect(drawer.locator('.detail-title-row h1')).toHaveCount(0);
+  await expect.poll(() => drawer.boundingBox()).toEqual({ x: 56, y: 0, width: 844, height: 850 });
+  await expect(page.locator('.sidebar')).toHaveAttribute('inert', '');
   await page.getByRole('tab', { name: 'GET Request' }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('tab', { name: 'POST Request' })).toHaveAttribute('aria-selected', 'true');
@@ -672,26 +821,56 @@ test('说明片段、图片、相对链接与搜索空状态', async ({ page }) 
   await expect(page.getByLabel('搜索代码片段')).toHaveValue('/');
 });
 
-test('移动端分级导航、搜索返回、Tab 与页面宽度', async ({ page }) => {
+test('手机侧栏和全宽详情抽屉保留搜索、滚动位置与历史', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('./');
   await page.getByRole('navigation', { name: '文件夹导航' }).getByRole('button', { name: /^python/ }).click();
-  await expect(page.locator('.mobile-subfolders')).toBeVisible();
+  await expect(page.locator('.sidebar [data-folder-path="python/files"]')).toBeVisible();
   await expect(page.locator('.snippet-item')).toHaveCount(3);
   await page.locator('.snippet-item').filter({ hasText: 'Python Requests' }).click();
   await expect(page.getByRole('heading', { name: 'Python Requests', exact: true })).toBeVisible();
+  const drawer = page.getByRole('dialog', { name: '片段详情' });
+  await expect(drawer).toHaveAttribute('aria-modal', 'true');
+  const title = drawer.locator('.drawer-toolbar h1');
+  await expect(title).toHaveText('Python Requests');
+  await expect(title).toHaveCSS('text-align', 'center');
+  await expect(drawer.locator('.detail-title-row h1')).toHaveCount(0);
+  await expect.poll(() => drawer.boundingBox()).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+  const titleBox = (await title.boundingBox())!;
+  expect(titleBox.x + titleBox.width / 2).toBe(195);
   for (const name of ['复制页面链接', '复制 Markdown URL', '复制 Markdown']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeInViewport();
   }
   await page.screenshot({ path: 'test-results/mobile-detail.png', fullPage: true });
+  await page.goBack();
+  await expect(page).toHaveURL(/\/folder\/python$/);
+  await expect(drawer).toHaveCount(0);
   await page.getByLabel('搜索代码片段').fill('ssh proxy');
   await expect(page.locator('.snippet-panel')).toBeVisible();
   await expect(page.locator('.snippet-item')).toHaveCount(1);
-  await page.locator('.snippet-item').click();
+  const match = page.locator('.snippet-item');
+  await match.click();
   await expect(page.getByRole('heading', { name: 'SSH SOCKS Proxy', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '返回', exact: true }).click();
-  await expect(page.locator('.snippet-panel')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(drawer).toHaveCount(0);
   await expect(page.getByLabel('搜索代码片段')).toHaveValue('ssh proxy');
+  await expect(match).toBeFocused();
+
+  await page.locator('.sidebar .all-folder').click();
+  const list = page.locator('.snippet-list');
+  const guide = list.getByRole('button', { name: /Organizing/ });
+  await list.evaluate(el => { el.scrollTop = el.scrollHeight; });
+  await guide.scrollIntoViewIfNeeded();
+  const scrollTop = await list.evaluate(el => el.scrollTop);
+  expect(scrollTop).toBeGreaterThan(0);
+  await guide.click();
+  await drawer.locator('.description').click({ position: { x: 8, y: 8 } });
+  await drawer.getByRole('link', { name: 'Python Requests', exact: true }).click();
+  await expect(drawer.getByRole('heading', { name: 'Python Requests', exact: true })).toBeVisible();
+  await drawer.getByRole('button', { name: '返回', exact: true }).click();
+  await expect(page).toHaveURL(/\/folder$/);
+  await expect(guide).toBeFocused();
+  expect(await list.evaluate(el => el.scrollTop)).toBe(scrollTop);
   const noOverflow = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
   expect(noOverflow).toBe(true);
   await page.screenshot({ path: 'test-results/mobile.png', fullPage: true });
@@ -727,6 +906,8 @@ test('生产 PWA 全库离线，包括未访问过的片段、搜索、Raw 与�
   await page.goto('./');
   await page.evaluate(async () => { await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) await new Promise<void>(resolve => navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })); });
   await context.setOffline(true);
+  await page.goto('settings');
+  await expect(page.getByRole('main', { name: '设置' })).toBeVisible();
   await page.goto('snippet/python/files/json/format');
   await expect(page.getByRole('heading', { name: 'Format JSON', exact: true })).toBeVisible();
   await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');

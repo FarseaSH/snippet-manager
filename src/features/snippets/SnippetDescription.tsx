@@ -42,8 +42,10 @@ export function SnippetDescription({ snippetPath, html, selectTab }: Props) {
       }} dangerouslySetInnerHTML={{ __html: html }} /></InlineCodeCopy>
     </div>
     {overflows && !expanded && <div className="description-overflow-hint" aria-hidden="true"><ChevronDown className="description-overflow-arrow" size={16} /></div>}
-    {overflows && <button type="button" className={`description-disclosure ${expanded ? 'description-collapse' : ''}`} aria-label={expanded ? '收起说明' : '展开说明'} aria-expanded={expanded} aria-controls={contentId} onClick={() => setExpanded(value => !value)}>
-      {expanded && <><ChevronUp className="description-collapse-arrow" size={16} aria-hidden="true" /><span>收起</span></>}
-    </button>}
+    {overflows && <div className={expanded ? 'description-footer' : undefined}>
+      <button type="button" className={`description-disclosure ${expanded ? 'description-collapse' : ''}`} aria-label={expanded ? '收起说明' : '展开说明'} aria-expanded={expanded} aria-controls={contentId} onClick={() => setExpanded(value => !value)}>
+        {expanded && <><ChevronUp className="description-collapse-arrow" size={16} aria-hidden="true" /><span>收起</span></>}
+      </button>
+    </div>}
   </section>;
 }
