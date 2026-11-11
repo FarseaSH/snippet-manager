@@ -1,6 +1,7 @@
 export interface MarkdownPreviewData {
   html: string;
   codeBlocks: { code: string; language: string }[];
+  urls?: Record<string, string>;
 }
 
 export interface SubSnippet {
@@ -8,6 +9,7 @@ export interface SubSnippet {
   title: string;
   sourceOrder: number;
   sourceDescription: string;
+  descriptionHtml: string;
   language: string;
   code: string;
   codeHtml: string;
@@ -15,6 +17,8 @@ export interface SubSnippet {
 }
 
 export interface Snippet {
+  type?: 'code' | 'transform';
+  transform?: TransformConfig;
   path: string;
   folder: string;
   name: string;
@@ -26,6 +30,14 @@ export interface Snippet {
   summary: string;
   subSnippets: SubSnippet[];
 }
+
+export interface TransformConfig {
+  inputLanguage: string;
+  outputLanguage: string;
+  example?: string;
+}
+
+export type TransformResult = { ok: true; output: string } | { ok: false; error: { message: string } };
 
 export interface Folder {
   name: string;

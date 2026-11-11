@@ -1,16 +1,25 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Check, Code2, Copy, Eye, FileCode2, FileText, Link, Maximize2, Minimize2 } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Check, Code2, Copy, Eye, Maximize2, Minimize2 } from 'lucide-react';
 import type { Snippet } from '../../core/types';
-import { encodePath, pagePath } from '../../core/paths';
 import { copyText } from '../../services/clipboard';
 import { SnippetDescription } from './SnippetDescription';
 import { LanguageIcon } from './LanguageIcon';
 import { MarkdownPreview } from './MarkdownPreview';
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor';
+import { parsePlaceholders, replacePlaceholders, type PlaceholderValues } from '../../core/placeholders';
+import { PlaceholderInputs } from './PlaceholderInputs';
+import { TabOutline } from './TabOutline';
+import { useRenderedCode } from './useRenderedCode';
+import { SnippetHeading } from './SnippetHeading';
+import { TransformDetail } from '../transforms/TransformDetail';
 
 interface Props { snippet: Snippet; initialTab?: string; showTitle?: boolean; notify(message: string): void }
 
-export function SnippetDetail({ snippet, initialTab, showTitle = true, notify }: Props) {
+export function SnippetDetail(props: Props) {
+  return props.snippet.type === 'transform' ? <TransformDetail key={props.snippet.path} {...props} /> : <CodeSnippetDetail {...props} />;
+}
+
+function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Props) {
   const [active, setActive] = useState(initialTab || snippet.subSnippets[0]?.id || '');
   const [showSource, setShowSource] = useState(false);
   const previewRef = useRef<CodeEditorHandle>(null);
@@ -23,15 +32,32 @@ export function SnippetDetail({ snippet, initialTab, showTitle = true, notify }:
   const [copied, setCopied] = useState(false);
   const tabsRef = useRef<HTMLDivElement>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [parameters, setParameters] = useState<{ path: string; tabs: Record<string, PlaceholderValues> }>({ path: snippet.path, tabs: {} });
   useEffect(() => {
     setActive(initialTab || snippet.subSnippets[0]?.id || '');
   }, [snippet.path, initialTab]);
   useEffect(() => () => clearTimeout(copyTimer.current), []);
   const sub = snippet.subSnippets.find(part => part.id === active) ?? snippet.subSnippets[0];
+  const template = useMemo(() => parsePlaceholders(sub?.code ?? ''), [sub?.code]);
+  const values = parameters.path === snippet.path ? parameters.tabs[sub?.id ?? ''] ?? {} : {};
+  const code = useMemo(() => replacePlaceholders(sub?.code ?? '', template, values), [sub?.code, template, values]);
+  const { snippet: displaySub, error: renderError } = useRenderedCode(sub, code);
+  function changeParameter(name: string, value: string) {
+    if (!sub) return;
+    setParameters(previous => {
+      const tabs = previous.path === snippet.path ? previous.tabs : {};
+      return { path: snippet.path, tabs: { ...tabs, [sub.id]: { ...tabs[sub.id], [name]: value } } };
+    });
+  }
+  function resetParameters() {
+    if (!sub) return;
+    setParameters(previous => ({ path: snippet.path, tabs: { ...(previous.path === snippet.path ? previous.tabs : {}), [sub.id]: {} } }));
+  }
+  useEffect(() => { setParameters({ path: snippet.path, tabs: {} }); }, [snippet.path]);
   const isMarkdown = Boolean(sub?.markdownPreview);
   const isPreview = isMarkdown && !showSource;
   const hasTabs = snippet.subSnippets.length > 1;
-  useEffect(() => { setCopied(false); clearTimeout(copyTimer.current); }, [sub?.id, sub?.code]);
+  useEffect(() => { setCopied(false); clearTimeout(copyTimer.current); }, [sub?.id, code]);
   useLayoutEffect(() => { setFocused(false); setShowSource(false); modeViews.current = {}; restoreEditor.current = undefined; }, [snippet.path, sub?.id]);
   useLayoutEffect(() => {
     restoreEditor.current?.(); restoreEditor.current = undefined;
@@ -74,22 +100,16 @@ export function SnippetDetail({ snippet, initialTab, showTitle = true, notify }:
       if (code) { setCopied(true); clearTimeout(copyTimer.current); copyTimer.current = setTimeout(() => setCopied(false), 1800); }
     } catch { notify('复制失败，请手动选择并复制内容'); }
   }
-  const absolute = (route: string) => new URL(import.meta.env.BASE_URL + route.replace(/^\//, ''), window.location.origin).href;
+  function selectTab(id: string) {
+    if (!snippet.subSnippets.some(part => part.id === id)) return;
+    setActive(id);
+    tabsRef.current?.querySelector<HTMLButtonElement>(`[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   return <div className={`snippet-detail-layout ${focused ? 'code-focused' : ''}`}>
     <div className="snippet-detail-scroll">
     <article className="snippet-detail" aria-label="片段详情">
-    <div className="detail-title-row">{showTitle && <h1>{snippet.name}</h1>}<div className="snippet-actions" role="group" aria-label="片段操作">
-      <button onClick={() => void copy(absolute(pagePath(snippet.path)), '页面链接已复制')}><Link size={14} />复制页面链接</button>
-      <button onClick={() => void copy(absolute(`/raw/${encodePath(snippet.path)}`), 'Markdown 地址已复制')}><FileCode2 size={14} />复制 Markdown URL</button>
-      <button onClick={() => void copy(snippet.raw, '完整 Markdown 已复制')}><FileText size={14} />复制 Markdown</button>
-    </div></div>
-    <div className="detail-tags">{snippet.tags.map(tag => <span className="tag" key={tag}>{tag}</span>)}</div>
-    {snippet.descriptionHtml && <SnippetDescription snippetPath={snippet.path} html={snippet.descriptionHtml} selectTab={id => {
-      if (snippet.subSnippets.some(part => part.id === id)) {
-        setActive(id);
-        tabsRef.current?.querySelector<HTMLButtonElement>(`[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      }
-    }} />}
+    <SnippetHeading snippet={snippet} showTitle={showTitle} notify={notify} />
+    {snippet.descriptionHtml && <SnippetDescription snippetPath={snippet.path} html={snippet.descriptionHtml} selectTab={selectTab} />}
     {sub ? <section className="code-section">
       {hasTabs && <div className="tabs" role="tablist" aria-label="子片段" ref={tabsRef} onKeyDown={event => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -99,8 +119,12 @@ export function SnippetDetail({ snippet, initialTab, showTitle = true, notify }:
         const target = snippet.subSnippets[index];
         setActive(target.id); tabsRef.current?.querySelector<HTMLButtonElement>(`[data-id="${target.id}"]`)?.focus();
       }}>
+        <TabOutline key={`${snippet.path}:${snippet.subSnippets.map(part => part.id).join(',')}`} active={sub.id} />
         {snippet.subSnippets.map(part => <button key={part.id} data-id={part.id} id={`tab-${part.id}`} className={`tab ${part.id === sub.id ? 'active' : ''}`} role="tab" tabIndex={part.id === sub.id ? 0 : -1} aria-selected={part.id === sub.id} aria-controls="code-panel" onClick={() => setActive(part.id)}><LanguageIcon language={part.language} />{part.title}</button>)}
       </div>}
+      <SnippetDescription snippetPath={snippet.path} descriptionKey={sub.id} className="tab-description" label="当前 Tab 说明" html={sub.descriptionHtml} selectTab={selectTab} />
+      <PlaceholderInputs template={template} values={values} onChange={changeParameter} onReset={resetParameters} />
+      {renderError && <p className="placeholder-render-error" role="alert">{renderError}</p>}
       <div className={`code-card ${isPreview ? 'markdown-window is-preview' : ''}`} role={hasTabs && !focused ? 'tabpanel' : 'region'} id="code-panel" aria-labelledby={hasTabs && !focused ? `tab-${sub.id}` : undefined} aria-label={hasTabs && !focused ? undefined : '代码'}>
         <div className={`code-window-bar ${isPreview ? '' : 'is-floating'}`}>
           {isPreview && <>
@@ -113,20 +137,18 @@ export function SnippetDetail({ snippet, initialTab, showTitle = true, notify }:
         </div>
         <div className="code-views">
           <div className={`code-view ${isMarkdown && !showSource ? 'is-inactive' : ''}`}>
-            <CodeEditor ref={editorRef} key={`${snippet.path}:${sub.id}`} snippet={sub} />
+            <CodeEditor ref={editorRef} key={`${snippet.path}:${sub.id}`} snippet={displaySub!} />
           </div>
-          {sub.markdownPreview && <div className={`code-view ${showSource ? 'is-inactive' : ''}`}>
-            <MarkdownPreview ref={previewRef} key={`${snippet.path}:${sub.id}`} preview={sub.markdownPreview} notify={notify} />
+          {isMarkdown && <div className={`code-view ${showSource ? 'is-inactive' : ''}`}>
+            {displaySub?.markdownPreview ? <MarkdownPreview ref={previewRef} key={`${snippet.path}:${sub.id}`} preview={displaySub.markdownPreview} notify={notify} /> : <div className="markdown-preview" role="status">{renderError ? '预览暂不可用，请查看源代码。' : '正在更新预览…'}</div>}
           </div>}
         </div>
         <footer className="code-statusbar" aria-label="当前代码状态栏">
-          <span className="language"><LanguageIcon language={sub.language} />{isMarkdown ? 'Markdown' : sub.language === 'text' ? 'Plain Text' : sub.language}</span>
+          <span className="language"><LanguageIcon language={sub.language} size={16} />{isMarkdown ? 'Markdown' : sub.language === 'text' ? 'Plain Text' : sub.language}</span>
           {isMarkdown && <button type="button" className="code-view-toggle" aria-label={showSource ? '切换到预览' : '查看源代码'} onClick={toggleSource}>
-            {showSource ? <Eye size={13} /> : <Code2 size={13} />}{showSource ? '预览' : '源代码'}
+            {showSource ? <Eye size={16} /> : <Code2 size={16} />}{showSource ? '预览' : '源代码'}
           </button>}
-          {(!isMarkdown || showSource) && <span className="editor-mode">只读</span>}
-          <span className="line-count">{sub.code.split('\n').length} 行</span>
-          <button className={`copy-code ${copied ? 'copied' : ''}`} onClick={() => void copy(sub.code, '代码已复制', true)}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? '已复制' : isMarkdown ? '复制 Markdown' : '复制当前代码'}</button>
+          <button className={`copy-code ${copied ? 'copied' : ''}`} onClick={() => void copy(code, '代码已复制', true)}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? '已复制' : isMarkdown ? '复制 Markdown' : '复制当前代码'}</button>
         </footer>
       </div>
     </section> : <div className="empty-code"><Code2 size={28} /><h3>这个片段还没有代码块</h3><p>说明内容仍可阅读和复制。添加代码块后，这里会显示代码。</p></div>}

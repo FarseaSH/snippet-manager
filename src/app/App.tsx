@@ -28,6 +28,7 @@ export function App() {
   const pwa = usePwa();
   const [state, dispatch] = useReducer(reducer, { query: '', expanded: new Set<string>() });
   const [toast, setToast] = useState('');
+  const [listScrolling, setListScrolling] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 700px)').matches);
   const [isNarrow, setIsNarrow] = useState(() => window.matchMedia('(max-width: 1100px)').matches);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -35,6 +36,7 @@ export function App() {
   const drawerOpener = useRef<HTMLButtonElement | null>(null);
   const restoreDone = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const listScrollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const location = useLocation();
   const navigate = useNavigate();
   let pathname = location.pathname.replace(/\/$/, '') || '/';
@@ -114,6 +116,12 @@ export function App() {
     return () => window.removeEventListener('keydown', shortcut);
   }, [closeDrawer, drawerOpen]);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+  useEffect(() => () => clearTimeout(listScrollTimer.current), []);
+  function handleListScroll() {
+    setListScrolling(true);
+    clearTimeout(listScrollTimer.current);
+    listScrollTimer.current = setTimeout(() => setListScrolling(false), 1000);
+  }
   function notify(message: string) { setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 2200); }
   function goHome() {
     restoreDone.current = true;
@@ -149,7 +157,7 @@ export function App() {
       <button className="activity-button activity-home" type="button" title="返回首页" aria-label="首页" onClick={goHome}>
         <span className="activity-logo">
           <Braces size={24} aria-hidden="true">
-            <path d="m14.5 7.5-5 9" stroke="#fb923c" />
+            <path d="m14.5 7.5-5 9" stroke="currentColor" />
           </Braces>
         </span>
       </button>
@@ -172,11 +180,11 @@ export function App() {
         {query && <div className="list-header">
           <div className="list-eyebrow">SEARCH RESULTS</div><div className="list-title"><h2>搜索结果</h2><span>{visible.length}</span></div><p>匹配 “{query}”</p>
         </div>}
-        <div className="snippet-list">
+        <div className={`snippet-list${listScrolling ? ' is-scrolling' : ''}`} onScroll={handleListScroll}>
           {!visible.length && <div className="list-empty">{query ? <SearchX size={27} /> : <FolderGlyph size={27} />}<h3>{query ? '没有找到匹配片段' : '这个目录还没有片段'}</h3><p>{query ? '试试更短的关键词，或清空搜索。' : '当前目录与子目录都没有有效 Snippet。'}</p></div>}
           {visible.map((snippet, index) => <button key={snippet.path} className={`snippet-item ${selected?.path === snippet.path ? 'active' : ''}`} onClick={event => selectSnippet(event.currentTarget, snippet.path, query ? results[index]?.tabId : undefined)}>
             <div className="snippet-folder"><FolderIcon icon={folders.get(snippet.folder)?.icon} size={12} /><span>{folderLabel(snippet.folder)}</span></div>
-            <div className="snippet-item-title"><strong>{snippet.name}</strong></div>
+            <div className="snippet-item-title"><strong>{snippet.name}</strong>{snippet.type === 'transform' && <span className="snippet-type-badge">转换</span>}</div>
             <p>{snippet.summary || '暂无说明'}</p>
             <div className="snippet-item-bottom"><span>{snippet.tags.slice(0, 3).map(tag => <span className="list-tag" key={tag}>{tag}</span>)}</span></div>
             {query && results[index]?.tabTitle && <div className="matched-tab"><Code2 size={11} />{results[index].tabTitle}</div>}

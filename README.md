@@ -29,6 +29,8 @@ dist/            自动生成的生产产物
 
 完整的文件约定、可复制模板和注意事项见 [Snippet 格式规范](docs/Snippet格式规范.md)。
 
+除普通代码片段外，还支持 `snippet_type: transform` 转换类型：左侧输入、右侧输出，停止输入约 500ms 后执行本地 JS 转换函数；第二个 Tab 可查看转换源码。支持校验提示、异步结果、超时终止和离线运行，示例见 [JSON 格式化转换](docs/examples/transform-json.md)。
+
 ````markdown
 ---
 snippet_name: 我的片段

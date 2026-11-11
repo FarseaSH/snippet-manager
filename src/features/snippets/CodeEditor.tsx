@@ -1,16 +1,43 @@
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import type { SubSnippet } from '../../core/types';
 
 export interface CodeEditorHandle { saveViewState(): () => void }
-interface Props { snippet: SubSnippet; ref?: Ref<CodeEditorHandle> }
+interface Props { snippet: SubSnippet; ref?: Ref<CodeEditorHandle>; editable?: boolean; onChange?(value: string): void; ariaLabel?: string; invalid?: boolean; describedBy?: string }
 const touchQuery = '(max-width: 700px), (pointer: coarse)';
 
-export function CodeEditor({ snippet, ref }: Props) {
+export function CodeEditor({ snippet, ref, editable = false, onChange, ariaLabel, invalid, describedBy }: Props) {
   const [touch, setTouch] = useState(() => window.matchMedia(touchQuery).matches);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const hostRef = useRef<HTMLDivElement>(null);
   const fallbackRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
+  const codeRef = useRef(snippet.code);
+  const onChangeRef = useRef(onChange);
+  useLayoutEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  useLayoutEffect(() => {
+    const input = editorRef.current?.getDomNode()?.querySelector('textarea');
+    if (!input) return;
+    if (invalid !== undefined) input.setAttribute('aria-invalid', String(invalid));
+    if (describedBy) input.setAttribute('aria-describedby', describedBy); else input.removeAttribute('aria-describedby');
+  }, [invalid, describedBy, status]);
+  useLayoutEffect(() => { codeRef.current = snippet.code; }, [snippet.code]);
+  useLayoutEffect(() => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!editor || !model) return;
+    const current = model.getValue();
+    const next = snippet.code.replace(/\r\n|\r|\n/g, model.getEOL());
+    if (current === next) return;
+    const state = editor.saveViewState();
+    let start = 0;
+    let end = 0;
+    while (start < current.length && start < next.length && current[start] === next[start]) start++;
+    while (end < current.length - start && end < next.length - start && current[current.length - end - 1] === next[next.length - end - 1]) end++;
+    const from = model.getPositionAt(start);
+    const to = model.getPositionAt(current.length - end);
+    model.applyEdits([{ range: { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column }, text: next.slice(start, next.length - end) }]);
+    if (state) editor.restoreViewState(state);
+  }, [snippet.code, status]);
   useImperativeHandle(ref, () => ({
     saveViewState() {
       const editor = editorRef.current;
@@ -39,11 +66,11 @@ export function CodeEditor({ snippet, ref }: Props) {
     setStatus('loading');
     import('./monaco-runtime').then(({ monaco, editorLanguage }) => {
       if (cancelled || !hostRef.current) return;
-      const model = monaco.editor.createModel(snippet.code, editorLanguage(snippet.language));
+      const model = monaco.editor.createModel(codeRef.current, editorLanguage(snippet.language));
       dispose = () => model.dispose();
       const editor = monaco.editor.create(hostRef.current, {
-        model, theme: 'tomorrow', readOnly: true, domReadOnly: true,
-        ariaLabel: `${snippet.title}，只读代码编辑器`, tabFocusMode: true, editContext: false,
+        model, theme: 'tomorrow', readOnly: !editable, domReadOnly: !editable,
+        ariaLabel: ariaLabel || `${snippet.title}，只读代码编辑器`, tabFocusMode: true, editContext: false,
         fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-code').trim(),
         fontSize: 13, lineHeight: 22, fontLigatures: false, tabSize: 4,
         minimap: { enabled: false }, lineNumbers: 'on', lineNumbersMinChars: 3,
@@ -57,19 +84,21 @@ export function CodeEditor({ snippet, ref }: Props) {
         hover: { enabled: 'off' }, contextmenu: true,
       });
       editorRef.current = editor;
+      const listener = editable ? editor.onDidChangeModelContent(() => onChangeRef.current?.(model.getValue())) : undefined;
       const observer = new ResizeObserver(() => editor.layout());
       observer.observe(hostRef.current);
-      dispose = () => { editorRef.current = null; observer.disconnect(); editor.dispose(); model.dispose(); };
+      dispose = () => { editorRef.current = null; listener?.dispose(); observer.disconnect(); editor.dispose(); model.dispose(); };
       editor.layout();
       setStatus('ready');
     }).catch(() => { dispose?.(); dispose = undefined; if (!cancelled) setStatus('error'); });
     return () => { cancelled = true; dispose?.(); };
-  }, [touch, snippet.code, snippet.language, snippet.title]);
+  }, [touch, snippet.language, snippet.title, editable, ariaLabel]);
 
-  if (touch || status === 'error') return <div className="code-fallback highlighted-code" ref={fallbackRef}>
+  if ((touch || status === 'error') && editable) return <textarea className="transform-textarea" aria-label={ariaLabel} aria-invalid={invalid} aria-describedby={describedBy} value={snippet.code} onChange={event => onChange?.(event.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" />;
+  if (touch || status === 'error') return <div className="code-fallback highlighted-code" ref={fallbackRef} role={ariaLabel ? 'textbox' : undefined} aria-label={ariaLabel} aria-readonly={ariaLabel ? true : undefined} aria-multiline={ariaLabel ? true : undefined}>
     <div className="code-content">
       <div className="line-numbers" aria-hidden="true">{snippet.code.split('\n').map((_, index) => <span key={index}>{index + 1}</span>)}</div>
-      <div className="code-source" dangerouslySetInnerHTML={{ __html: snippet.codeHtml }} />
+      {snippet.codeHtml ? <div className="code-source" dangerouslySetInnerHTML={{ __html: snippet.codeHtml }} /> : <div className="code-source"><pre><code>{snippet.code}</code></pre></div>}
     </div>
   </div>;
 

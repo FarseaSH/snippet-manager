@@ -1,21 +1,16 @@
+import { renderMarkdownNodes, highlightedCode, renderMarkdownPreview } from '../../src/core/code-rendering.ts';
+import { parsePlaceholders } from '../../src/core/placeholders.ts';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
-import remarkRehype from 'remark-rehype';
-import rehypeSanitize from 'rehype-sanitize';
-import rehypeStringify from 'rehype-stringify';
 import { parse as parseYaml } from 'yaml';
-import { codeToHtml, codeToHast, bundledLanguages } from 'shiki';
-import tomorrowTheme from '../../src/core/tomorrow.json' with { type: 'json' };
-import { getLanguageIcon } from '../../src/core/language-icons.ts';
 import type { Root, RootContent, Code } from 'mdast';
-import type { Element, Root as HastRoot, RootContent as HastContent } from 'hast';
-import type { Snippet, SubSnippet, Diagnostic, MarkdownPreviewData } from '../../src/core/types.ts';
+import type { Snippet, SubSnippet, Diagnostic, TransformConfig } from '../../src/core/types.ts';
 
 type Part = { sub: SubSnippet; nodes: RootContent[] };
 type Retained = { order: number; nodes: RootContent[] };
 type ResolveLink = (url: string, kind: 'link' | 'image') => string;
-const escape = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]!));
+type ResolveTab = (title: string) => SubSnippet | undefined;
 
 export function plainText(node: unknown): string {
   const value = node as { value?: string; alt?: string; children?: unknown[] };
@@ -28,91 +23,7 @@ function previewText(node: unknown): string {
   return value.value ?? value.alt ?? value.children?.map(previewText).join(' ') ?? '';
 }
 
-async function render(nodes: RootContent[], resolve: ResolveLink, codeBlocks?: MarkdownPreviewData['codeBlocks']): Promise<string> {
-  const tree = structuredClone({ type: 'root', children: nodes }) as Root;
-  function visit(node: any) {
-    if (node.type === 'html') node.type = 'text';
-    if (node.type === 'link' || node.type === 'image' || node.type === 'definition') {
-      node.url = resolve(node.url, node.type === 'image' ? 'image' : 'link');
-    }
-    node.children?.forEach(visit);
-  }
-  visit(tree);
-  const processor = unified().use(remarkRehype).use(rehypeSanitize).use(rehypeStringify);
-  const result = await processor.run(tree);
-  if (codeBlocks) {
-    const blocks = codeBlocks;
-    let index = 0;
-    async function highlightBlocks(parent: HastRoot | Element) {
-      for (let childIndex = 0; childIndex < parent.children.length; childIndex++) {
-        const child = parent.children[childIndex];
-        if (child.type !== 'element') continue;
-        if (child.tagName === 'pre' && child.children[0]?.type === 'element' && child.children[0].tagName === 'code') {
-          const blockIndex = index++;
-          const block = blocks[blockIndex];
-          const highlighted = await codeToHast(block.code, highlightOptions(block.language));
-          const icon = getLanguageIcon(block.language);
-          parent.children[childIndex] = {
-            type: 'element', tagName: 'div', properties: { className: ['preview-code-block'] },
-            children: [
-              { type: 'element', tagName: 'div', properties: { className: ['preview-code-header'] }, children: [
-                { type: 'element', tagName: 'svg', properties: {
-                  className: ['preview-code-icon'], width: 14, height: 14, viewBox: '0 0 24 24', ariaHidden: 'true', focusable: 'false', dataLanguageIcon: icon?.slug ?? 'fallback',
-                  fill: !icon || icon.stroke ? 'none' : icon.hex ? `#${icon.hex}` : 'currentColor',
-                  ...(!icon || icon.stroke ? { stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } : {}),
-                }, children: [{ type: 'element', tagName: 'path', properties: { d: icon?.path ?? 'm16 18 6-6-6-6M8 6l-6 6 6 6m6-16-4 20' }, children: [] }] },
-                { type: 'element', tagName: 'span', properties: { className: ['preview-code-language'] }, children: [{ type: 'text', value: block.language === 'text' ? 'Plain Text' : block.language }] },
-              ] },
-              {
-                type: 'element', tagName: 'button', properties: { type: 'button', className: ['preview-copy'], dataPreviewCopy: String(blockIndex), ariaLabel: `复制代码块 ${blockIndex + 1}`, title: '复制代码' },
-                children: [
-                  { type: 'element', tagName: 'svg', properties: { className: ['preview-copy-icon'], width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', ariaHidden: 'true' }, children: [
-                    { type: 'element', tagName: 'rect', properties: { x: 9, y: 9, width: 13, height: 13, rx: 2 }, children: [] },
-                    { type: 'element', tagName: 'path', properties: { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }, children: [] },
-                  ] },
-                  { type: 'element', tagName: 'svg', properties: { className: ['preview-copy-check'], width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', ariaHidden: 'true' }, children: [
-                    { type: 'element', tagName: 'path', properties: { d: 'm20 6-11 11-5-5' }, children: [] },
-                  ] },
-                ],
-              },
-              { type: 'element', tagName: 'div', properties: { className: ['preview-code-body'] }, children: [
-                { type: 'element', tagName: 'div', properties: { className: ['preview-line-numbers'], ariaHidden: 'true' }, children: block.code.split('\n').map((_, lineIndex) => ({
-                  type: 'element', tagName: 'span', properties: {}, children: [{ type: 'text', value: String(lineIndex + 1) }],
-                })) },
-                ...highlighted.children as HastContent[],
-              ] },
-            ],
-          } as Element;
-        } else await highlightBlocks(child);
-      }
-    }
-    await highlightBlocks(result);
-  }
-  return processor.stringify(result);
-}
-
-function highlightOptions(language: string) {
-  const aliases: Record<string, string> = { shell: 'bash', sh: 'bash', js: 'javascript', ts: 'typescript', py: 'python', yml: 'yaml', md: 'markdown' };
-  const lang = aliases[language.trim().toLowerCase()] ?? language.trim().toLowerCase();
-  return { lang: Object.hasOwn(bundledLanguages, lang) ? lang as keyof typeof bundledLanguages : 'text', theme: { ...tomorrowTheme, type: 'light' as const } };
-}
-
-async function highlighted(code: string, language: string): Promise<string> {
-  return codeToHtml(code, highlightOptions(language));
-}
-
-async function markdownPreview(code: string, resolve: ResolveLink): Promise<MarkdownPreviewData> {
-  const tree = unified().use(remarkParse).use(remarkGfm).parse(code) as Root;
-  const codeBlocks: MarkdownPreviewData['codeBlocks'] = [];
-  function collect(node: Root | RootContent) {
-    if (node.type === 'code') codeBlocks.push({ code: node.value, language: node.lang || 'text' });
-    if ('children' in node) node.children.forEach(child => collect(child as RootContent));
-  }
-  collect(tree);
-  return { html: await render(tree.children, resolve, codeBlocks), codeBlocks };
-}
-
-export function validateMetadata(raw: string): { body: string; name: string; tags: string[] } {
+export function validateMetadata(raw: string): { body: string; name: string; tags: string[]; type: 'code' | 'transform'; transform?: TransformConfig } {
   const front = /^(?:\uFEFF)?---\s*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(raw);
   if (!front) throw new Error('缺少有效 Front Matter（---）');
   let metadata: any;
@@ -120,14 +31,51 @@ export function validateMetadata(raw: string): { body: string; name: string; tag
   catch (error) { throw new Error(`Front Matter 无法解析：${(error as Error).message.split('\n')[0]}`); }
   if (!metadata || typeof metadata.snippet_name !== 'string' || !metadata.snippet_name.trim()) throw new Error('snippet_name 必须是非空字符串');
   if (!Array.isArray(metadata.snippet_tags) || !metadata.snippet_tags.every((tag: unknown) => typeof tag === 'string')) throw new Error('snippet_tags 必须是字符串数组（允许 []）');
-  return { body: raw.slice(front[0].length), name: metadata.snippet_name.trim(), tags: [...new Set<string>(metadata.snippet_tags)] };
+  const type = metadata.snippet_type === undefined ? 'code' : metadata.snippet_type;
+  if (type !== 'code' && type !== 'transform') throw new Error('snippet_type 仅支持 code 或 transform');
+  let transform: TransformConfig | undefined;
+  if (type === 'transform') {
+    const config = metadata.transform === undefined ? {} : metadata.transform;
+    if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('transform 必须是配置对象');
+    for (const key of ['input_language', 'output_language', 'example']) {
+      if (config[key] !== undefined && typeof config[key] !== 'string') throw new Error(`transform.${key} 必须是字符串`);
+    }
+    transform = { inputLanguage: config.input_language?.trim() || 'text', outputLanguage: config.output_language?.trim() || 'text', ...(config.example !== undefined ? { example: config.example } : {}) };
+  }
+  return { body: raw.slice(front[0].length), name: metadata.snippet_name.trim(), tags: [...new Set<string>(metadata.snippet_tags)], type, transform };
 }
 
 export async function parseSnippet(raw: string, path: string, diagnostics: Diagnostic[] = [], resolve: ResolveLink = url => url): Promise<Snippet> {
-  const { body, name, tags } = validateMetadata(raw);
+  const { body, name, tags, type, transform } = validateMetadata(raw);
   const tree = unified().use(remarkParse).use(remarkGfm).parse(body) as Root;
+  if (type === 'transform') {
+    const blocks = tree.children.filter((node): node is Code => node.type === 'code' && /^ {0,3}(`{3,}|~{3,})/.test(body.slice(node.position?.start.offset ?? 0)));
+    if (blocks.length !== 1 || !['js', 'javascript'].includes(blocks[0].lang?.toLowerCase() || '')) throw new Error('转换 Snippet 必须包含且仅包含一个顶层 js 或 javascript 围栏代码块');
+    const block = blocks[0];
+    const sub: SubSnippet = { id: 'transform-code', title: '转换代码', sourceOrder: 0, sourceDescription: '', descriptionHtml: '', language: 'javascript', code: block.value, codeHtml: await highlightedCode(block.value, 'javascript') };
+    const operation: SubSnippet = { ...sub, id: 'transform', title: '转换', language: 'text', code: '', codeHtml: '' };
+    const nodes = tree.children.filter(node => node !== block && !(node.type === 'heading' && node.depth === 1 && plainText(node).trim() === '转换代码'));
+    const reported = new Set<string>();
+    const descriptionHtml = await renderMarkdownNodes(nodes, resolve, undefined, title => {
+      const target = [operation, sub].find(item => item.title === title);
+      if (!target && !reported.has(title)) { diagnostics.push({ level: 'warning', path, message: `Tab 引用“${title}”没有匹配目标，已保留原文` }); reported.add(title); }
+      return target;
+    });
+    const descriptionText = nodes.map(plainText).join('\n');
+    return { type, transform, path, folder: path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '', name, tags, raw, mainDescription: nodes.map(node => body.slice(node.position?.start.offset ?? 0, node.position?.end.offset ?? 0)).join('\n\n'), descriptionHtml, descriptionText, summary: nodes.map(previewText).join(' ').replace(/\s+/g, ' ').trim(), subSnippets: [sub] };
+  }
   const definitions = tree.children.filter(node => node.type === 'definition');
-  const renderNodes = (nodes: RootContent[]) => render([...nodes, ...definitions.filter(node => !nodes.includes(node))], resolve);
+  const tabsByTitle = new Map<string, SubSnippet[]>();
+  const reportedReferences = new Set<string>();
+  const resolveTab: ResolveTab = title => {
+    const matches = tabsByTitle.get(title) ?? [];
+    if (matches.length === 1) return matches[0];
+    if (!reportedReferences.has(title)) {
+      diagnostics.push({ level: 'warning', path, message: matches.length ? `Tab 引用“${title}”有多个同名目标，已保留原文` : `Tab 引用“${title}”没有匹配目标，已保留原文` });
+      reportedReferences.add(title);
+    }
+  };
+  const renderNodes = (nodes: RootContent[]) => renderMarkdownNodes([...nodes, ...definitions.filter(node => !nodes.includes(node))], resolve, undefined, resolveTab);
   const main: RootContent[] = [];
   const parts: Part[] = [];
   const retained: Retained[] = [];
@@ -145,7 +93,7 @@ export async function parseSnippet(raw: string, path: string, diagnostics: Diagn
       const codeNode = node as Code;
       const named = section && !section.part;
       const title = named ? section!.title : (++untitled === 1 ? 'Untitled' : `Untitled ${untitled}`);
-      const sub: SubSnippet = { id: `block-${parts.length + 1}`, title, sourceOrder: named ? section!.order : order, sourceDescription: '', language: codeNode.lang || 'text', code: codeNode.value, codeHtml: '' };
+      const sub: SubSnippet = { id: `block-${parts.length + 1}`, title, sourceOrder: named ? section!.order : order, sourceDescription: '', descriptionHtml: '', language: codeNode.lang || 'text', code: codeNode.value, codeHtml: '' };
       const part: Part = { sub, nodes: named ? section!.before : [] };
       parts.push(part);
       if (section) section.part = part;
@@ -154,37 +102,20 @@ export async function parseSnippet(raw: string, path: string, diagnostics: Diagn
     else section.before.push(node);
   }
   finish();
+  for (const { sub } of parts) tabsByTitle.set(sub.title, [...(tabsByTitle.get(sub.title) ?? []), sub]);
   for (const part of parts) {
+    for (const issue of parsePlaceholders(part.sub.code).issues) diagnostics.push({ level: 'warning', path, message: `${part.sub.title}：${issue}` });
     part.sub.sourceDescription = source(part.nodes);
-    part.sub.codeHtml = await highlighted(part.sub.code, part.sub.language);
-    if (['md', 'markdown'].includes(part.sub.language.trim().toLowerCase())) part.sub.markdownPreview = await markdownPreview(part.sub.code, resolve);
+    part.sub.descriptionHtml = await renderNodes(part.nodes);
+    part.sub.codeHtml = await highlightedCode(part.sub.code, part.sub.language);
+    if (['md', 'markdown'].includes(part.sub.language.trim().toLowerCase())) part.sub.markdownPreview = await renderMarkdownPreview(part.sub.code, resolve);
   }
   if (parts.length) for (const item of retained) diagnostics.push({ level: 'warning', path, message: `一级标题“${plainText(item.nodes[0])}”没有关联代码块，已保留正文` });
   let descriptionHtml = '';
   if (!parts.length) descriptionHtml = await renderNodes(tree.children);
   else {
     descriptionHtml = await renderNodes(main);
-    const rest = [
-      ...retained.map(item => ({ order: item.order, retained: item.nodes, part: undefined as Part | undefined })),
-      ...parts.map(part => ({ order: part.sub.sourceOrder, retained: undefined as RootContent[] | undefined, part })),
-    ].sort((a, b) => a.order - b.order);
-    for (const item of rest) {
-      if (item.retained) descriptionHtml += await renderNodes(item.retained);
-      else if (item.part) {
-        const html = await renderNodes(item.part.nodes);
-        if (parts.length === 1) descriptionHtml += html;
-        else {
-          const languageIcon = getLanguageIcon(item.part.sub.language);
-          const logo = languageIcon
-            ? `<svg width="16" height="16" viewBox="0 0 24 24" ${languageIcon.stroke ? 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"' : `fill="${languageIcon.hex ? `#${languageIcon.hex}` : 'currentColor'}"`} data-language-icon="${languageIcon.slug}"><path d="${languageIcon.path}" /></svg>`
-            : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-language-icon="fallback"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/><path d="m14 2-4 20"/></svg>';
-          const icon = `<span class="sub-summary-icon" aria-hidden="true">${logo}</span>`;
-          const name = `<button type="button" class="summary-tab" data-tab-id="${item.part.sub.id}">${icon}<span class="summary-tab-name">${escape(item.part.sub.title)}</span></button>`;
-          const simple = item.part.nodes.length === 1 && item.part.nodes[0].type === 'paragraph';
-          descriptionHtml += `<div class="sub-summary"><div class="sub-summary-body">${name}${simple ? `：${html.replace(/^<p>|<\/p>$/g, '')}` : html ? `<div class="sub-description">${html}</div>` : ''}</div></div>`;
-        }
-      }
-    }
+    for (const item of retained) descriptionHtml += await renderNodes(item.nodes);
   }
   const allDescriptionNodes = tree.children.filter(node => !(node.type === 'code' && /^ {0,3}(`{3,}|~{3,})/.test(body.slice(node.position?.start.offset ?? 0))));
   const descriptionText = allDescriptionNodes.map(plainText).join('\n');

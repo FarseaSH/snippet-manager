@@ -63,6 +63,8 @@ test('目录图标继承与覆盖，列表路径和窄屏入口一致，配置�
   }
 });
 
+const readClipboard = (page: Page) => page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, '\n'));
+
 async function readEditorCode(page: Page) {
   if (await page.locator('.code-fallback').count()) return (await page.locator('.code-fallback .code-source code').textContent())!;
   await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
@@ -71,7 +73,7 @@ async function readEditorCode(page: Page) {
   const modifier = await page.evaluate(() => navigator.platform.includes('Mac') ? 'Meta' : 'Control');
   await page.keyboard.press(`${modifier}+A`);
   await page.keyboard.press(`${modifier}+C`);
-  return page.evaluate(() => navigator.clipboard.readText());
+  return readClipboard(page);
 }
 
 test('编辑器首次加载即显示折叠箭头，收起与展开切换正常', async ({ page }) => {
@@ -126,7 +128,7 @@ test('Monaco 只读编辑器支持精确复制与查找，切换代码和窄屏�
   await page.screenshot({ path: 'test-results/monaco-desktop.png', fullPage: true });
   await page.getByRole('tab', { name: 'JSON Response' }).click();
   expect(await readEditorCode(page)).toBe('data = response.json()\nprint(data)');
-  await expect(page.locator('.code-statusbar .line-count')).toHaveText('2 行');
+  await expect(page.locator('.code-statusbar .line-count, .code-statusbar .editor-mode')).toHaveCount(0);
   await page.setViewportSize({ width: 900, height: 850 });
   await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -134,7 +136,7 @@ test('Monaco 只读编辑器支持精确复制与查找，切换代码和窄屏�
   await expect(page.locator('.code-fallback')).toBeVisible();
   await expect(page.locator('.monaco-editor')).toHaveCount(0);
   await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('data = response.json()\nprint(data)');
+  expect(await readClipboard(page)).toBe('data = response.json()\nprint(data)');
   await page.screenshot({ path: 'test-results/monaco-mobile.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
@@ -161,8 +163,8 @@ test('长代码完整复制、折叠与滚动，JSON 高亮及旧模型释放', 
     await expect(page.locator('.codicon-folding-collapsed').first()).toBeVisible();
     expect(await readEditorCode(page)).toBe(source);
     await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(source);
-    await expect(page.locator('.code-statusbar .line-count')).toHaveText(`${source.split('\n').length} 行`);
+    expect(await readClipboard(page)).toBe(source);
+    await expect(page.locator('.code-statusbar .line-count, .code-statusbar .editor-mode')).toHaveCount(0);
     const modifier = await page.evaluate(() => navigator.platform.includes('Mac') ? 'Meta' : 'Control');
     await page.locator('.monaco-editor textarea').focus();
     await page.keyboard.press(modifier === 'Meta' ? 'Meta+ArrowDown' : 'Control+End');
@@ -194,18 +196,18 @@ test('子片段按语言显示 Logo，未知与缺失类型保留默认图标', 
   try {
     await page.goto('./');
     await page.getByLabel('搜索代码片段').fill('Icon Logo Smoke');
-    await fs.writeFile(file, '---\nsnippet_name: Icon Logo Smoke\nsnippet_tags: []\n---\n\n' + parts.map(([name, lang, code]) => `# ${name}\n\n\`\`\`${lang}\n${code}\n\`\`\``).join('\n\n'));
+    await fs.writeFile(file, '---\nsnippet_name: Icon Logo Smoke\nsnippet_tags: []\n---\n\n' + parts.map(([name]) => `\`:@${name}\``).join('、') + '\n\n' + parts.map(([name, lang, code]) => `# ${name}\n\n\`\`\`${lang}\n${code}\n\`\`\``).join('\n\n'));
     await expect(page.locator('.snippet-item')).toHaveCount(1);
     await page.locator('.snippet-item').click();
-    await page.locator('.description').click({ position: { x: 8, y: 8 } });
+    await page.locator('.snippet-detail > .description').click({ position: { x: 8, y: 8 } });
     for (const [name, , code, icon] of parts) {
       const tab = page.getByRole('tab', { name, exact: true });
       await expect(tab.locator('.language-icon')).toHaveAttribute('data-language-icon', icon);
       await tab.click();
-      const summary = page.locator('.sub-summary').filter({ has: page.getByRole('button', { name, exact: true }) });
-      await expect(summary.locator('[data-language-icon]')).toHaveAttribute('data-language-icon', icon);
-      await summary.locator('.sub-summary-icon').click();
-      await expect(page.locator('.description-content')).not.toHaveClass(/collapsed/);
+      const reference = page.locator('.tab-reference').filter({ hasText: name });
+      await expect(reference.locator('[data-language-icon]')).toHaveAttribute('data-language-icon', icon);
+      await reference.locator('.tab-reference-icon').click();
+      await expect(page.locator('.snippet-detail > .description .description-content')).not.toHaveClass(/collapsed/);
       await expect(page.locator('.code-statusbar .language-icon')).toHaveAttribute('data-language-icon', icon);
       await expect(page.locator('.highlighted-code')).toContainText(code);
     }
@@ -219,15 +221,15 @@ test('活动栏位于最左，搜索位于列表栏，窄屏搜索保持连续�
   const activity = page.locator('.activity-bar');
   await expect(brand).toHaveText('Snippet Manager');
   await expect(brand).toHaveCSS('border-bottom-width', '0px');
-  await expect(activity).toHaveCSS('background-color', 'rgb(242, 76, 0)');
+  await expect(activity).toHaveCSS('background-color', 'rgb(255, 237, 213)');
   await expect(activity).toHaveCSS('border-right-width', '0px');
   await expect(activity).toHaveCSS('border-radius', '14px 0px 0px 14px');
   await expect(logo).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-  await expect(logo).toHaveCSS('color', 'rgb(242, 76, 0)');
+  await expect(logo).toHaveCSS('color', 'rgb(194, 65, 12)');
   await expect(logo).toHaveCSS('border-radius', '50%');
   await expect(logo).toHaveCSS('width', '36px');
   await expect(logo).toHaveCSS('height', '36px');
-  await expect(logo.locator('path').last()).toHaveCSS('stroke', 'rgb(251, 146, 60)');
+  await expect(logo.locator('path').last()).toHaveCSS('stroke', 'rgb(194, 65, 12)');
   await expect(page.locator('.sidebar')).toHaveCSS('background-color', 'rgb(245, 245, 245)');
   await expect(page.locator('.snippet-panel .global-search')).toBeVisible();
   await expect(page.locator('.app-header')).toHaveCount(0);
@@ -369,7 +371,7 @@ test('手机浏览时可调整侧栏，打开抽屉后正文占满屏幕', async
   await expect(page.locator('.sidebar')).toHaveCSS('width', '210px');
 });
 
-test('目录递归、搜索定位与 Tab 说明保持不变', async ({ page }) => {
+test('目录递归、搜索定位与总说明保持不变，子说明随 Tab 切换', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('./');
@@ -389,7 +391,7 @@ test('目录递归、搜索定位与 Tab 说明保持不变', async ({ page }) =
   const preview = await item.locator('p').evaluate(el => ({
     height: el.clientHeight, fullHeight: el.scrollHeight, lineHeight: Number.parseFloat(getComputedStyle(el).lineHeight),
   }));
-  expect(preview.height).toBeLessThanOrEqual(preview.lineHeight * 2 + 1);
+  expect(preview.height).toBeLessThanOrEqual(preview.lineHeight + 1);
   expect(preview.fullHeight).toBeGreaterThan(preview.height);
   const pathPosition = await item.locator('.snippet-folder').boundingBox();
   const titlePosition = await item.locator('.snippet-item-title').boundingBox();
@@ -397,71 +399,114 @@ test('目录递归、搜索定位与 Tab 说明保持不变', async ({ page }) =
   await page.locator('.snippet-item').click();
   await expect(page.getByRole('heading', { name: 'Python Requests', exact: true })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'POST Request' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.tab-description')).toContainText('提交 JSON 请求体');
   await expect(page.locator('.list-title')).toContainText('搜索结果');
-  const description = await page.locator('.markdown').innerText();
+  const description = await page.locator('.snippet-detail > .description .markdown').innerText();
   await page.getByRole('tab', { name: 'GET Request' }).click();
-  expect(await page.locator('.markdown').innerText()).toBe(description);
+  await expect(page.locator('.tab-description')).toContainText('传递查询参数');
+  expect(await page.locator('.snippet-detail > .description .markdown').innerText()).toBe(description);
   await page.screenshot({ path: 'test-results/desktop.png', fullPage: true });
-  await page.locator('.description').click({ position: { x: 8, y: 8 } });
-  await expect(page.locator('.description-content')).not.toHaveClass(/collapsed/);
   await page.getByRole('tab', { name: 'POST Request' }).click();
-  await expect(page.locator('.description-content')).not.toHaveClass(/collapsed/);
-  await page.getByRole('button', { name: '收起说明', exact: true }).click();
-  await expect(page.locator('.description-content')).toHaveClass(/collapsed/);
-  await expect(page.locator('.markdown')).toBeVisible();
+  expect(await page.locator('.snippet-detail > .description .markdown').innerText()).toBe(description);
+  await expect(page.locator('.snippet-detail > .description .markdown')).toBeVisible();
   await page.getByRole('button', { name: '清空搜索' }).click();
   await expect(page.locator('.list-title')).toHaveCount(0);
   await expect(page.locator('.list-header')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
-test('子片段说明无分割线和圆点，代码图标对齐名称，点击名称保持展开', async ({ page }) => {
-  for (const width of [1440, 390]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto('snippet/git/branch');
-    await page.locator('.description').click({ position: { x: 8, y: 8 } });
-    const markdown = page.locator('.markdown');
-    await expect(markdown.locator('hr, ul.sub-summary, .sub-summary > li')).toHaveCount(0);
-    await expect(markdown.locator('.sub-summary-icon')).toHaveCount(3);
-    const name = markdown.getByRole('button', { name: 'Delete Branch', exact: true });
-    await name.hover();
-    expect(await name.evaluate(el => getComputedStyle(el).textDecorationLine)).toBe('none');
-    expect(await name.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
-    expect(await name.evaluate(el => getComputedStyle(el).fontFamily)).not.toContain('monospace');
-    await name.click();
-    await expect(page.getByRole('tab', { name: 'Delete Branch', exact: true })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.description-content')).not.toHaveClass(/collapsed/);
-    await expect(markdown).toContainText('未合并的分支会拒绝删除');
-    const row = markdown.locator('.sub-summary').nth(1);
-    const icon = await row.locator('.sub-summary-icon').boundingBox();
-    const title = await name.locator('.summary-tab-name').boundingBox();
-    expect(icon!.x + icon!.width).toBeLessThan(title!.x);
-    expect(Math.abs(icon!.y + icon!.height / 2 - title!.y - title!.height / 2)).toBeLessThan(5);
-    await expect(row.locator('button')).toHaveCount(1);
-    for (const target of [name.locator('.sub-summary-icon'), name.locator('.summary-tab-name')]) {
-      await page.getByRole('tab', { name: 'Create Branch', exact: true }).click();
-      await target.hover();
-      const colors = await name.evaluate(el => ({
-        button: getComputedStyle(el).color,
-        icon: getComputedStyle(el.querySelector('.sub-summary-icon')!).color,
-        name: getComputedStyle(el.querySelector('.summary-tab-name')!).color,
-      }));
-      expect(colors.icon).toBe(colors.button);
-      expect(colors.name).toBe(colors.button);
-      await target.click();
-      await expect(page.getByRole('tab', { name: 'Delete Branch', exact: true })).toHaveAttribute('aria-selected', 'true');
-      await expect(page.locator('.description-content')).not.toHaveClass(/collapsed/);
+test('Tab 说明独立显示和折叠，显式引用可点击及键盘跳转，短屏保留代码', async ({ page, context }) => {
+  test.skip(production, '使用临时内容验证说明布局与 Tab 引用');
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const file = path.resolve(contentRoot, `__tab-description-${process.pid}.md`);
+  const paragraphs = Array.from({ length: 18 }, (_, i) => `第 ${i} 段较长的说明内容。`).join('\n\n');
+  const front = '---\nsnippet_name: Tab Description\nsnippet_tags: [test]\n---\n\n';
+  const raw = front + '总说明，参考 `:@数组去重` 或 `:@GET Request`。\n\n' + paragraphs
+    + '\n\n# 数组去重\n\n去重说明，参考 `:@GET Request`。\n\n' + paragraphs + '\n\n```js\nconst unique = [...new Set(values)];\n```'
+    + '\n\n# GET Request\n\n请求说明，返回 `:@数组去重`。\n\n' + paragraphs + '\n\n```python\nprint("request")\n```'
+    + '\n\n# Empty\n\n```text\nempty\n```';
+  try {
+    await fs.writeFile(file, raw);
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 390, height: 600 }]) {
+      await page.setViewportSize(viewport);
+      await page.goto(`snippet/__tab-description-${process.pid}`);
+      const main = page.locator('.snippet-detail > .description');
+      const sub = page.getByRole('region', { name: '当前 Tab 说明', exact: true });
+      const mainContent = main.locator('.description-content');
+      const subContent = sub.locator('.description-content');
+      await expect(main).not.toContainText('去重说明');
+      await expect(main.locator('.sub-summary')).toHaveCount(0);
+      await expect(sub).toContainText('去重说明');
+      await expect(sub).not.toContainText('请求说明');
+      await expect(mainContent).toHaveClass(/collapsed/);
+      await expect(subContent).toHaveClass(/collapsed/);
+      const tabsBox = (await page.getByRole('tablist').boundingBox())!;
+      const subBox = (await sub.boundingBox())!;
+      const codeBox = (await page.locator('.code-card').boundingBox())!;
+      expect(tabsBox.y + tabsBox.height).toBeLessThanOrEqual(subBox.y);
+      expect(subBox.y + subBox.height).toBeLessThan(codeBox.y);
+      const reference = main.getByRole('button', { name: 'GET Request', exact: true });
+      await expect(reference.locator('[data-language-icon]')).toHaveAttribute('data-language-icon', 'python');
+      await expect(reference).not.toContainText(':@');
+      await reference.click({ modifiers: ['Control'] });
+      await expect(page.getByRole('tab', { name: 'GET Request', exact: true })).toHaveAttribute('aria-selected', 'true');
+      await expect(sub).toContainText('请求说明');
+      await expect(mainContent).toHaveClass(/collapsed/);
+      const back = sub.getByRole('button', { name: '数组去重', exact: true });
+      await back.focus();
+      await page.keyboard.press('Enter');
+      await expect(sub).toContainText('去重说明');
+      await sub.click({ position: { x: 8, y: 8 } });
+      await expect(subContent).not.toHaveClass(/collapsed/);
+      await expect(mainContent).toHaveClass(/collapsed/);
+      await sub.getByRole('button', { name: 'GET Request', exact: true }).click();
+      await expect(subContent).toHaveClass(/collapsed/);
+      await sub.getByRole('button', { name: '数组去重', exact: true }).focus();
+      await page.keyboard.press('Space');
+      await expect(subContent).not.toHaveClass(/collapsed/);
+      // An empty-description tab must not erase another tab's expansion state.
+      await page.getByRole('tab', { name: 'Empty', exact: true }).click();
+      await expect(page.locator('.tab-description')).toBeHidden();
+      await page.getByRole('tab', { name: '数组去重', exact: true }).click();
+      await expect(subContent).not.toHaveClass(/collapsed/);
+      await main.click({ position: { x: 8, y: 8 } });
+      await expect(mainContent).not.toHaveClass(/collapsed/);
+      await expect(subContent).not.toHaveClass(/collapsed/);
+      await expect(sub.locator('.markdown > p').first()).toBeInViewport({ ratio: 0.9 });
+      await expect(page.getByRole('button', { name: '复制当前代码', exact: true })).toBeInViewport();
+      expect((await page.locator('.highlighted-code').boundingBox())!.height).toBeGreaterThan(40);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: `test-results/tab-description-${viewport.width}-${viewport.height}.png` });
+      await sub.getByRole('button', { name: '收起说明', exact: true }).click();
+      await expect(subContent).toHaveClass(/collapsed/);
+      await expect(mainContent).not.toHaveClass(/collapsed/);
+      await page.goto('snippet/git/branch');
+      await page.goto(`snippet/__tab-description-${process.pid}`);
+      await expect(mainContent).toHaveClass(/collapsed/);
+      await expect(subContent).toHaveClass(/collapsed/);
+      await page.getByRole('button', { name: '复制 Markdown', exact: true }).click();
+      expect((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(raw);
     }
-    await page.getByRole('tab', { name: 'Create Branch', exact: true }).click();
-    await name.focus();
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('tab', { name: 'Delete Branch', exact: true })).toHaveAttribute('aria-selected', 'true');
-    await page.locator('.description').screenshot({ path: `test-results/sub-description-${width}.png` });
-    await page.goto('snippet/python/http/requests');
-    await page.locator('.description').click({ position: { x: 8, y: 8 } });
-    await expect(page.locator('.sub-summary [data-language-icon="python"]')).toHaveCount(3);
-    await page.locator('.description').screenshot({ path: `test-results/sub-description-python-${width}.png` });
-  }
+  } finally { await fs.rm(file, { force: true }); }
+});
+
+test('仅一个子片段仍单独显示说明，无总说明或无子说明时不留空框', async ({ page }) => {
+  test.skip(production, '使用临时内容验证单片段与空说明');
+  const file = path.resolve(contentRoot, `__single-description-${process.pid}.md`);
+  try {
+    await fs.writeFile(file, '---\nsnippet_name: Single Description\nsnippet_tags: []\n---\n\n# Only\n\n单独的短说明，引用自己 `:@Only`。\n\n```text\none\n```');
+    await page.goto(`snippet/__single-description-${process.pid}`);
+    await expect(page.getByRole('tablist')).toHaveCount(0);
+    await expect(page.locator('.snippet-detail > .description')).toHaveCount(0);
+    const sub = page.locator('.tab-description');
+    await expect(sub).toContainText('单独的短说明');
+    await expect(sub.locator('.description-disclosure')).toHaveCount(0);
+    await sub.getByRole('button', { name: 'Only', exact: true }).click();
+    await expect(page.getByRole('region', { name: '代码', exact: true })).toBeVisible();
+    await page.goto('snippet/python/files/read-json');
+    await expect(sub).toBeHidden();
+    await expect(page.locator('.snippet-detail > .description')).toBeVisible();
+  } finally { await fs.rm(file, { force: true }); }
 });
 
 test('说明整框展开、仅按钮收起，键盘可操作，短说明完整显示', async ({ page }) => {
@@ -472,14 +517,14 @@ test('说明整框展开、仅按钮收起，键盘可操作，短说明完整�
   await fs.mkdir(directory, { recursive: true });
   try {
     const paragraphs = Array.from({ length: 24 }, (_, index) => `说明段落 ${index}，用于检查阅读和滚动时不会误收起。`).join('\n\n');
-    await fs.writeFile(path.join(directory, 'long.md'), front + paragraphs + '\n\n# Example\n\n示例说明\n\n```python\nprint(1)\n```\n\n# Another\n\n另一段说明\n\n```python\nprint(2)\n```');
+    await fs.writeFile(path.join(directory, 'long.md'), front + '参考 `:@Another`。\n\n' + paragraphs + '\n\n# Example\n\n示例说明\n\n```python\nprint(1)\n```\n\n# Another\n\n另一段说明\n\n```python\nprint(2)\n```');
     await fs.writeFile(path.join(directory, 'short.md'), front + '不需要安装额外依赖');
     await page.goto(`snippet/${prefix}/long`);
-    const viewport = page.locator('.description-content');
+    const viewport = page.locator('.snippet-detail > .description .description-content');
     await expect(viewport).toHaveClass(/collapsed/);
     const previewHeight = await viewport.evaluate(el => el.getBoundingClientRect().height);
     expect(await viewport.evaluate(el => el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight))).toBeCloseTo(5, 1);
-    const frame = page.locator('.description');
+    const frame = page.locator('.snippet-detail > .description');
     const hint = frame.locator('.description-overflow-hint');
     await expect(hint).toBeVisible();
     await frame.screenshot({ path: 'test-results/description-glass-desktop.png' });
@@ -515,7 +560,7 @@ test('说明整框展开、仅按钮收起，键盘可操作，短说明完整�
     await page.keyboard.press('Space');
     await expect(viewport).toHaveClass(/collapsed/);
     await frame.click({ position: { x: 8, y: 8 } });
-    await frame.locator('.summary-tab').last().click();
+    await frame.locator('.tab-reference').last().click();
     await expect(viewport).not.toHaveClass(/collapsed/);
     // Selecting text to copy must not collapse the frame.
     await frame.locator('.markdown > p').first().evaluate(el => {
@@ -530,7 +575,7 @@ test('说明整框展开、仅按钮收起，键盘可操作，短说明完整�
     await expect(viewport).toHaveClass(/collapsed/);
     expect(await viewport.evaluate(el => el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight))).toBeCloseTo(5, 1);
     await frame.screenshot({ path: 'test-results/description-glass-mobile.png' });
-    await page.locator('.description').click({ position: { x: 8, y: 8 } });
+    await page.locator('.snippet-detail > .description').click({ position: { x: 8, y: 8 } });
     await expect(collapse).toBeVisible();
     await frame.screenshot({ path: 'test-results/description-expanded-mobile.png' });
     await frame.click({ position: { x: 8, y: 8 } });
@@ -539,9 +584,9 @@ test('说明整框展开、仅按钮收起，键盘可操作，短说明完整�
     await collapse.click();
     await expect(viewport).toHaveClass(/collapsed/);
     await page.goto(`snippet/${prefix}/short`);
-    await expect(page.locator('.markdown')).toContainText('不需要安装额外依赖');
+    await expect(page.locator('.snippet-detail > .description .markdown')).toContainText('不需要安装额外依赖');
     await expect(page.locator('.description-disclosure, .description-overflow-hint')).toHaveCount(0);
-    await page.locator('.description').click({ position: { x: 8, y: 8 } });
+    await page.locator('.snippet-detail > .description').click({ position: { x: 8, y: 8 } });
     await expect(viewport).not.toHaveClass(/collapsed/);
     await page.goto(`snippet/${prefix}/long`);
     await expect(viewport).toHaveClass(/collapsed/);
@@ -584,7 +629,9 @@ test('编辑器动态填满剩余高度，缩放、展开说明与切换长短�
         expect(await editor.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
       }
       await page.getByRole('tab', { name: 'Short', exact: true }).click();
-      await expect(statusbar.locator('.line-count')).toHaveText('1 行');
+      await expect(statusbar.locator('.line-count, .editor-mode')).toHaveCount(0);
+      await expect(statusbar.locator('.language')).toHaveCSS('font-size', '13px');
+      await expect(statusbar.locator('.copy-code')).toHaveCSS('font-size', '13px');
       await checkBottom();
       expect((await editor.boundingBox())!.height).toBeCloseTo(height, 0);
       await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
@@ -592,8 +639,8 @@ test('编辑器动态填满剩余高度，缩放、展开说明与切换长短�
       await page.getByRole('button', { name: '展开说明', exact: true }).evaluate((el: HTMLButtonElement) => el.click());
       await checkBottom();
       expect((await editor.boundingBox())!.height).toBeLessThan(height);
-      expect(await page.locator('.description').evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
-      await page.locator('.description').evaluate(el => { el.scrollTop = el.scrollHeight; });
+      expect(await page.locator('.snippet-detail > .description').evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+      await page.locator('.snippet-detail > .description').evaluate(el => { el.scrollTop = el.scrollHeight; });
       await page.getByRole('button', { name: '收起说明', exact: true }).evaluate((el: HTMLButtonElement) => el.click());
       await checkBottom();
       expect((await editor.boundingBox())!.height).toBeCloseTo(height, 0);
@@ -614,10 +661,10 @@ test('唯一子片段直接显示代码，多个子片段保留 Tab', async ({ p
       await expect(page.getByRole('tab')).toHaveCount(0);
       await expect(page.getByRole('tabpanel')).toHaveCount(0);
       await expect(page.locator('.highlighted-code')).toContainText('import json');
-      await expect(page.locator('.markdown')).toBeVisible();
+      await expect(page.locator('.snippet-detail > .description .markdown')).toBeVisible();
       await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
       const source = await readEditorCode(page);
-      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(source);
+      expect((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(source.replace(/\r\n/g, '\n'));
       await expect(renderedLines(page)).toHaveCount(source!.split('\n').length);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
@@ -640,7 +687,7 @@ test('四种复制对象正确，深层链接可刷新，Raw 文件保持原文'
   await page.getByRole('tab', { name: 'POST Request' }).click();
   await expect(renderedLines(page)).toHaveText(['1', '2', '3', '4', '5', '6', '7', '8']);
   await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
-  const code = await page.evaluate(() => navigator.clipboard.readText());
+  const code = await readClipboard(page);
   expect(code).toBe(await readEditorCode(page));
   expect(code).toContain('json={'); expect(code).not.toContain('```'); expect(code).not.toContain('snippet_name');
   await page.getByRole('button', { name: '复制页面链接', exact: true }).click();
@@ -732,7 +779,7 @@ test('桌面、平板和手机通过同一文件夹侧栏切换范围', async ({
   };
   await expect(page.locator('.sidebar')).toBeVisible();
   await expect(labels).toHaveText(['个人收藏', '文件夹']);
-  await expect(labels.first()).toHaveCSS('font-size', '11px');
+  await expect(labels.first()).toHaveCSS('font-size', '13px');
   await expectLabelAlignment();
   await expect(page.locator('.list-header')).toHaveCount(0);
   await expect(page.locator('.snippet-item')).toHaveCount(2);
@@ -808,7 +855,7 @@ test('说明片段、图片、相对链接与搜索空状态', async ({ page }) 
   await expect(page.getByRole('tab')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '复制当前代码', exact: true })).toHaveCount(0);
   expect(await page.locator('.markdown img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
-  await page.locator('.description').click({ position: { x: 8, y: 8 } });
+  await page.locator('.snippet-detail > .description').click({ position: { x: 8, y: 8 } });
   await page.getByRole('link', { name: 'Python Requests', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Python Requests', exact: true })).toBeVisible();
   await page.getByLabel('搜索代码片段').fill('xxxxxxxx-no-match');
@@ -864,7 +911,7 @@ test('手机侧栏和全宽详情抽屉保留搜索、滚动位置与历史', as
   const scrollTop = await list.evaluate(el => el.scrollTop);
   expect(scrollTop).toBeGreaterThan(0);
   await guide.click();
-  await drawer.locator('.description').click({ position: { x: 8, y: 8 } });
+  await drawer.locator('.snippet-detail > .description').click({ position: { x: 8, y: 8 } });
   await drawer.getByRole('link', { name: 'Python Requests', exact: true }).click();
   await expect(drawer.getByRole('heading', { name: 'Python Requests', exact: true })).toBeVisible();
   await drawer.getByRole('button', { name: '返回', exact: true }).click();
@@ -921,7 +968,7 @@ test('生产 PWA 全库离线，包括未访问过的片段、搜索、Raw 与�
   await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('curl --proxy socks5h');
   await page.goto('snippet/guides/organizing');
-  await page.locator('.description').click({ position: { x: 8, y: 8 } });
+  await page.locator('.snippet-detail > .description').click({ position: { x: 8, y: 8 } });
   await expect(page.locator('.markdown img')).toBeVisible();
   expect(await page.locator('.markdown img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
   const rawUrl = new URL('raw/python/http/requests.md', test.info().project.use.baseURL).href;
@@ -967,7 +1014,7 @@ test('展开代码仅占正文区，保留当前代码和编辑器状态，按�
     await expect(page.getByRole('button', { name: '恢复正文' })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('heading', { name: 'Code Focus', exact: true })).toBeHidden();
     await expect(page.getByRole('tablist', { name: '子片段' })).toBeHidden();
-    await expect(page.locator('.description')).toBeHidden();
+    await expect(page.locator('.snippet-detail > .description')).toBeHidden();
     expect(await page.locator('.sidebar').boundingBox()).toEqual(sidebar);
     expect(await page.locator('.snippet-panel').boundingBox()).toEqual(list);
     const panel = await page.locator('.detail-panel').boundingBox();
@@ -976,7 +1023,7 @@ test('展开代码仅占正文区，保留当前代码和编辑器状态，按�
     expect(focused!.height).toBeGreaterThan(original!.height);
     await expect(page.getByLabel('当前代码状态栏')).toBeInViewport();
     await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(source);
+    expect((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(source);
     expect((await editorState()).model).toBe(before.model);
     expect((await editorState()).folding).toEqual(before.folding);
     await page.screenshot({ path: 'test-results/code-focused-desktop.png' });
@@ -1007,7 +1054,7 @@ test('展开代码仅占正文区，保留当前代码和编辑器状态，按�
     await fallback.evaluate(el => { el.scrollTop = 1200; el.scrollLeft = 20; });
     const mobileScroll = await fallback.evaluate(el => ({ top: el.scrollTop, left: el.scrollLeft }));
     await page.getByRole('button', { name: '展开代码', exact: true }).click();
-    await expect(page.locator('.description')).toBeHidden();
+    await expect(page.locator('.snippet-detail > .description')).toBeHidden();
     await expect(page.getByLabel('当前代码状态栏')).toBeInViewport();
     expect(await page.locator('.code-card').boundingBox()).toEqual(await page.locator('.detail-panel').boundingBox());
     await page.screenshot({ path: 'test-results/code-focused-mobile.png' });
@@ -1026,7 +1073,7 @@ test('Markdown 默认预览、底栏切换、代码块复制与展开阅读，�
   await fs.mkdir(directory, { recursive: true });
   await fs.writeFile(path.join(directory, 'preview.md'), raw);
   try {
-    const markdown = raw.split('````markdown\n')[1].split('\n````')[0];
+    const markdown = raw.replace(/\r\n/g, '\n').split('````markdown\n')[1].split('\n````')[0];
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`snippet/${prefix}/preview`);
@@ -1070,13 +1117,13 @@ test('Markdown 默认预览、底栏切换、代码块复制与展开阅读，�
     });
     await firstCopy.click();
     await expect.poll(() => preview.getAttribute('data-copy-feedback')).toBe(JSON.stringify({ color: 'rgb(21, 128, 61)', checkVisible: true }));
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npm install\nnpm run dev');
+    expect(await readClipboard(page)).toBe('npm install\nnpm run dev');
     await expect(firstCopy).not.toHaveClass(/copied/);
     await expect(firstCopy.locator('.preview-copy-icon')).toBeVisible();
     await preview.getByRole('button', { name: '复制代码块 2', exact: true }).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('def greet(name: str) -> str:\n    return f"你好，{name}！欢迎来到代码库。"\n\n\nprint(greet("开发者"))');
+    expect(await readClipboard(page)).toBe('def greet(name: str) -> str:\n    return f"你好，{name}！欢迎来到代码库。"\n\n\nprint(greet("开发者"))');
     await footer.getByRole('button', { name: '复制 Markdown', exact: true }).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(markdown);
+    expect(await readClipboard(page)).toBe(markdown);
     await preview.evaluate(el => { el.scrollTop = 260; });
     const previewTop = await preview.evaluate(el => el.scrollTop);
     await page.getByRole('button', { name: '查看源代码' }).click();
@@ -1141,9 +1188,9 @@ test('行内代码支持修饰键复制、悬停提示和局部反馈，不触�
   try {
     await fs.writeFile(path.join(directory, 'example.md'), front + description + '\n\n# Markdown\n\n````md\n' + markdown + '\n````');
     await page.goto(`snippet/${prefix}/example`);
-    const descriptionFrame = page.locator('.description');
+    const descriptionFrame = page.locator('.snippet-detail > .description');
     const descriptionCode = descriptionFrame.locator('p > code').first();
-    const disclosure = page.locator('.description-content');
+    const disclosure = page.locator('.snippet-detail > .description .description-content');
     const tooltip = page.locator('.inline-code-feedback');
     const modifier = await page.evaluate(() => navigator.platform.includes('Mac') ? 'Meta' : 'Control');
     await expect(disclosure).toHaveClass(/collapsed/);
@@ -1241,7 +1288,7 @@ test('生产 Markdown 预览与源码离线切换，代码块和行内代码可�
   await expect(preview).toBeVisible();
   await expect(page.locator('.window-dot')).toHaveCount(3);
   await preview.getByRole('button', { name: '复制代码块 1', exact: true }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npm install\nnpm run dev');
+  expect(await readClipboard(page)).toBe('npm install\nnpm run dev');
   const inline = preview.locator('td code').first();
   await inline.click({ modifiers: [await page.evaluate(() => navigator.platform.includes('Mac') ? 'Meta' : 'Control')] });
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('# 项目名称');

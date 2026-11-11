@@ -19,6 +19,7 @@ export function MarkdownPreview({ preview, notify, ref }: Props) {
     });
   });
   useEffect(() => () => { timers.current.forEach(clearTimeout); timers.current.clear(); }, []);
+  useEffect(() => { timers.current.forEach(clearTimeout); timers.current.clear(); setCopiedBlocks(new Set()); }, [preview]);
   useImperativeHandle(ref, () => ({
     saveViewState() {
       const viewport = viewportRef.current;

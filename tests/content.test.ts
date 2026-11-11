@@ -45,23 +45,19 @@ describe('Markdown 产品规则', () => {
     expect(preview.codeBlocks).toEqual([{ code: 'one\n\nthree', language: 'custom-lang' }, { code: 'plain', language: 'text' }]);
   });
 
-  it('摘要 Logo 跟随代码块语言，支持别名，未知语言使用默认图标', async () => {
-    const result = await parseSnippet(front + '# JavaScript\n\n```py\nprint(1)\n```\n\n# Python\n\n```js\nconsole.log(2)\n```\n\n# Unknown\n\n```custom\nthree\n```', 'logos.md');
+  it('Tab 引用 Logo 跟随目标代码语言，支持别名与默认图标', async () => {
+    const result = await parseSnippet(front + '`:@JavaScript`、`:@Python`、`:@Unknown`。\n\n# JavaScript\n\n```py\nprint(1)\n```\n\n# Python\n\n```js\nconsole.log(2)\n```\n\n# Unknown\n\n```custom\nthree\n```', 'logos.md');
     expect(result.descriptionHtml.match(/data-language-icon="([^"]+)"/g)).toEqual([
       'data-language-icon="python"', 'data-language-icon="javascript"', 'data-language-icon="fallback"',
     ]);
-    expect(result.descriptionHtml).toContain('<span class="sub-summary-icon"');
+    expect(result.descriptionHtml).toContain('<span class="tab-reference-icon"');
   });
-  it('子片段摘要使用代码图标，无自动分割线和列表标记，源说明列表保留', async () => {
+  it('总说明与子片段说明分别输出，不再自动生成子片段汇总', async () => {
     const raw = front + '主说明。\n\n# First\n\n简短说明。\n\n```text\none\n```\n\n# Second\n\n- 原有列表项\n\n```text\ntwo\n```';
     const result = await parseSnippet(raw, 'summary.md');
-    expect(result.descriptionHtml.match(/class="sub-summary-icon"/g)).toHaveLength(2);
-    expect(result.descriptionHtml).not.toContain('<hr');
-    expect(result.descriptionHtml).not.toContain('<ul class="sub-summary"');
-    expect(result.descriptionHtml).toContain('<div class="sub-summary-body">');
-    expect(result.descriptionHtml).toContain('data-tab-id="block-2"');
-    expect(result.descriptionHtml).toContain('<li>原有列表项</li>');
-    expect(result.descriptionHtml.indexOf('First')).toBeLessThan(result.descriptionHtml.indexOf('Second'));
+    expect(result.descriptionHtml).toBe('<p>主说明。</p>');
+    expect(result.subSnippets[0].descriptionHtml).toBe('<p>简短说明。</p>');
+    expect(result.subSnippets[1].descriptionHtml).toContain('<li>原有列表项</li>');
     expect(result.raw).toBe(raw);
   });
   it('列表说明保留全文供两行截断，并排除顶层和嵌套代码块', async () => {
@@ -76,16 +72,18 @@ describe('Markdown 产品规则', () => {
     expect(result.subSnippets).toHaveLength(1);
     expect(result.subSnippets[0].title).toBe('SSH');
     expect(result.subSnippets[0].sourceDescription).toContain('登录之后');
-    expect(result.descriptionHtml).toContain('登录之前');
-    expect(result.descriptionHtml).toContain('登录之后');
-    expect(result.descriptionHtml).not.toContain('summary-tab');
+    expect(result.descriptionHtml).toBe('');
+    expect(result.subSnippets[0].descriptionHtml).toContain('登录之前');
+    expect(result.subSnippets[0].descriptionHtml).toContain('登录之后');
   });
   it('标题只命名下一代码块；中间文字归前一个，第二块为 Untitled', async () => {
     const result = await parseSnippet(front + '# Named\n\n```js\nconst a = 1\n```\n\n第一段补充。\n\n```js\nconst b = 2\n```\n\n第二段补充。', 'two.md');
     expect(result.subSnippets.map(sub => sub.title)).toEqual(['Named', 'Untitled']);
     expect(result.subSnippets[0].sourceDescription).toBe('第一段补充。');
     expect(result.subSnippets[1].sourceDescription).toBe('第二段补充。');
-    expect(result.descriptionHtml.indexOf('第一段补充')).toBeLessThan(result.descriptionHtml.indexOf('第二段补充'));
+    expect(result.subSnippets[0].descriptionHtml).toContain('第一段补充');
+    expect(result.subSnippets[0].descriptionHtml).not.toContain('第二段补充');
+    expect(result.subSnippets[1].descriptionHtml).toContain('第二段补充');
   });
   it('连续标题保留无代码标题，不跨标题命名；不会丢弃正文', async () => {
     const diagnostics: Diagnostic[] = [];
@@ -108,9 +106,9 @@ describe('Markdown 产品规则', () => {
     expect(result.subSnippets).toHaveLength(1);
     expect(result.subSnippets[0].title).toBe('示例');
     expect(result.subSnippets[0].code).toBe('real()');
-    expect(result.descriptionHtml).toContain('quoted()');
-    expect(result.descriptionHtml).toContain('listed()');
-    expect(result.descriptionHtml).toContain('indented()');
+    expect(result.subSnippets[0].descriptionHtml).toContain('quoted()');
+    expect(result.subSnippets[0].descriptionHtml).toContain('listed()');
+    expect(result.subSnippets[0].descriptionHtml).toContain('indented()');
   });
   it('第一个标题前的文本全归主说明，无标题代码自动编号', async () => {
     const result = await parseSnippet(front + '开始。\n\n```custom\nx()\n```\n\n中间。\n\n~~~text\ny()\n~~~\n\n结尾。', 'unnamed.md');
@@ -133,8 +131,47 @@ describe('Markdown 产品规则', () => {
   });
   it('分段渲染保留全文的引用式链接定义', async () => {
     const result = await parseSnippet(front + '# First\n\n看 [文档][docs]。\n\n```text\none\n```\n\n# Second\n\n```text\ntwo\n```\n\n[docs]: https://example.com', 'references.md');
-    expect(result.descriptionHtml).toContain('href="https://example.com"');
+    expect(result.subSnippets[0].descriptionHtml).toContain('href="https://example.com"');
     expect(result.subSnippets).toHaveLength(2);
+  });
+  it('主说明和子说明支持向后引用、中文及带空格的 Tab 名称，原文保持不变', async () => {
+    const raw = front + '使用 `:@ 数组去重 ` 或 `:@GET Request`。\n\n# 数组去重\n\n参考 `:@GET Request`。\n\n```js\nconst a = 1\n```\n\n# GET Request\n\n```python\nprint(1)\n```';
+    const diagnostics: Diagnostic[] = [];
+    const result = await parseSnippet(raw, 'references.md', diagnostics);
+    expect(result.descriptionHtml).toContain('data-tab-id="block-1"');
+    expect(result.descriptionHtml).toContain('data-tab-id="block-2"');
+    expect(result.descriptionHtml).not.toContain(':@');
+    expect(result.subSnippets[0].descriptionHtml).toContain('data-tab-id="block-2"');
+    expect(result.subSnippets[1].descriptionHtml).toBe('');
+    expect(result.raw).toBe(raw);
+    expect(result.subSnippets[0].sourceDescription).toBe('参考 `:@GET Request`。');
+    expect(diagnostics).toEqual([]);
+  });
+  it('空引用、找不到或重名的引用保留行内代码并诊断，匹配区分大小写', async () => {
+    const diagnostics: Diagnostic[] = [];
+    const result = await parseSnippet(front + '`:@` `:@Missing` `:@Same` `:@same` `:@Missing`\n\n# Same\n\n```text\none\n```\n\n# Same\n\n```text\ntwo\n```', 'invalid-refs.md', diagnostics);
+    expect(result.descriptionHtml).not.toContain('data-tab-id');
+    expect(result.descriptionHtml).toContain('<code>:@Missing</code>');
+    expect(diagnostics).toHaveLength(4);
+    expect(diagnostics.every(item => item.level === 'warning' && item.path === 'invalid-refs.md')).toBe(true);
+    expect(diagnostics.some(item => item.message.includes('多个同名'))).toBe(true);
+  });
+  it('普通文本、链接、描述中的代码块及 Markdown 预览不转换 Tab 引用', async () => {
+    const diagnostics: Diagnostic[] = [];
+    const result = await parseSnippet(front + ':@Target [只有链接 `:@Target`](https://example.com)\n\n> ```text\n> :@Target\n> ```\n\n# Target\n\n````md\n`:@Target`\n````', 'literal-refs.md', diagnostics);
+    expect(result.descriptionHtml).not.toContain('data-tab-id');
+    expect(result.descriptionHtml).toContain('<code>:@Target</code></a>');
+    expect(result.descriptionHtml).toContain('<pre><code class="language-text">:@Target');
+    expect(result.subSnippets[0].code).toBe('`:@Target`');
+    expect(result.subSnippets[0].markdownPreview?.html).toBe('<p><code>:@Target</code></p>');
+    expect(diagnostics).toEqual([]);
+  });
+  it('Tab 引用名称以文本安全输出，不能插入 HTML', async () => {
+    const title = '<img src=x onerror=alert(1)>';
+    const result = await parseSnippet(front + '`:@' + title + '`\n\n# ' + title + '\n\n```text\none\n```', 'safe-ref.md');
+    expect(result.descriptionHtml).toContain('data-tab-id="block-1"');
+    expect(result.descriptionHtml).not.toContain('<img');
+    expect(result.descriptionHtml).toContain('&#x3C;img');
   });
   it.each(['---\nsnippet_tags: []\n---\n', '---\nsnippet_name: " "\nsnippet_tags: []\n---\n', '---\nsnippet_name: A\nsnippet_tags: wrong\n---\n', 'no front matter', '---\nsnippet_name: [\nsnippet_tags: []\n---\n'])('无效元数据由调用方跳过', async raw => {
     await expect(parseSnippet(raw, 'invalid.md')).rejects.toThrow();
