@@ -2,10 +2,10 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import type { TransformExecution } from '../../core/transform';
 import { runTransform } from './transform-runtime';
 
-type State = TransformExecution | { status: 'idle' | 'waiting' | 'running' };
-interface Run { code: string; input: string; state: State }
+export type TransformState = TransformExecution | { status: 'idle' | 'waiting' | 'running' };
+interface Run { code: string; input: string; state: TransformState }
 
-export function useLiveTransform(code: string, input: string): State {
+export function useLiveTransform(code: string, input: string): TransformState {
   const [run, setRun] = useState<Run>();
   useLayoutEffect(() => { setRun(undefined); }, [code, input]);
   useEffect(() => {

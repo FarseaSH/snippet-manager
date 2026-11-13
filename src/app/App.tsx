@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type MouseEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowDownToLine, ArrowLeft, ArrowRight, Braces, Check, Code2, FileText, Folder as FolderGlyph, LoaderCircle, Search, SearchX, Settings, WifiOff, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeft, ArrowLeftRight, ArrowRight, Braces, Check, Code2, FileText, Folder as FolderGlyph, LoaderCircle, Search, SearchX, Settings, WifiOff, X } from 'lucide-react';
 import { useContent } from './useContent';
 import { ResizablePanes } from './ResizablePanes';
 import { usePwa } from '../pwa/usePwa';
@@ -184,7 +184,7 @@ export function App() {
           {!visible.length && <div className="list-empty">{query ? <SearchX size={27} /> : <FolderGlyph size={27} />}<h3>{query ? '没有找到匹配片段' : '这个目录还没有片段'}</h3><p>{query ? '试试更短的关键词，或清空搜索。' : '当前目录与子目录都没有有效 Snippet。'}</p></div>}
           {visible.map((snippet, index) => <button key={snippet.path} className={`snippet-item ${selected?.path === snippet.path ? 'active' : ''}`} onClick={event => selectSnippet(event.currentTarget, snippet.path, query ? results[index]?.tabId : undefined)}>
             <div className="snippet-folder"><FolderIcon icon={folders.get(snippet.folder)?.icon} size={12} /><span>{folderLabel(snippet.folder)}</span></div>
-            <div className="snippet-item-title"><strong>{snippet.name}</strong>{snippet.type === 'transform' && <span className="snippet-type-badge">转换</span>}</div>
+            <div className="snippet-item-title"><strong>{snippet.name}</strong>{snippet.type === 'transform' && <span className="snippet-type-badge" role="img" aria-label="转换片段" title="转换片段"><ArrowLeftRight size={12} aria-hidden="true" /></span>}</div>
             <p>{snippet.summary || '暂无说明'}</p>
             <div className="snippet-item-bottom"><span>{snippet.tags.slice(0, 3).map(tag => <span className="list-tag" key={tag}>{tag}</span>)}</span></div>
             {query && results[index]?.tabTitle && <div className="matched-tab"><Code2 size={11} />{results[index].tabTitle}</div>}
@@ -194,7 +194,7 @@ export function App() {
       detail={<section className={`detail-region${drawerOpen ? ' detail-drawer' : ''}`} role={drawerOpen ? 'dialog' : undefined} aria-label={drawerOpen ? '片段详情' : undefined} aria-modal={mobileDrawer || undefined} onClick={drawerOpen ? followDrawerLink : undefined}>
         {drawerOpen && <div className="drawer-toolbar">
           <button type="button" ref={drawerBackRef} className="icon-button drawer-back" aria-label="返回" title="返回片段列表（Esc）" onClick={closeDrawer}><ArrowLeft size={20} /></button>
-          {selected && <h1 className="drawer-title">{selected.name}</h1>}
+          {selected && <h1 className="drawer-title">{selected.name}{selected.type === 'transform' && <span className="snippet-type-badge snippet-heading-type"><ArrowLeftRight size={12} aria-hidden="true" />转换</span>}</h1>}
         </div>}
         <div className="detail-panel">
           {selected ? <SnippetDetail snippet={selected} initialTab={state.tabPath === selected.path ? state.tab : undefined} showTitle={!drawerOpen} notify={notify} /> : <div className="folder-placeholder">

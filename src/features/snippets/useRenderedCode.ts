@@ -5,14 +5,16 @@ interface Rendered { source: SubSnippet; code: string; html: string; preview?: M
 
 export function useRenderedCode(source: SubSnippet | undefined, code: string) {
   const [rendered, setRendered] = useState<Rendered>();
+  const isMarkdown = !!source && ['md', 'markdown'].includes(source.language.trim().toLowerCase());
+  const needsRendering = !!source && (code !== source.code || (isMarkdown && !source.markdownPreview));
   useEffect(() => {
-    if (!source || code === source.code) return;
+    if (!source || !needsRendering) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       import('../../core/code-rendering').then(async renderer => {
         const [html, preview] = await Promise.all([
           renderer.highlightedCode(code, source.language),
-          source.markdownPreview ? renderer.renderMarkdownPreview(code, (url, kind) => source.markdownPreview?.urls?.[`${kind}:${url}`] ?? url) : undefined,
+          isMarkdown ? renderer.renderMarkdownPreview(code, (url, kind) => source.markdownPreview?.urls?.[`${kind}:${url}`] ?? url) : undefined,
         ]);
         if (!cancelled) setRendered({ source, code, html, preview });
       }).catch(() => {
@@ -20,9 +22,9 @@ export function useRenderedCode(source: SubSnippet | undefined, code: string) {
       });
     }, 100);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [source, code]);
+  }, [source, code, isMarkdown, needsRendering]);
   if (!source) return { snippet: undefined, error: undefined };
-  if (code === source.code) return { snippet: source, error: undefined };
+  if (!needsRendering) return { snippet: source, error: undefined };
   const current = rendered?.source === source && rendered.code === code ? rendered : undefined;
   return { snippet: { ...source, code, codeHtml: current?.html ?? '', markdownPreview: current?.preview }, error: current?.error };
 }

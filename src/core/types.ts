@@ -37,7 +37,7 @@ export interface TransformConfig {
   example?: string;
 }
 
-export type TransformResult = { ok: true; output: string } | { ok: false; error: { message: string } };
+export type TransformResult = { ok: true; output: string; language?: string } | { ok: false; error: { message: string } };
 
 export interface Folder {
   name: string;

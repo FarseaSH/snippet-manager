@@ -301,7 +301,7 @@ export default function transform(input) {
 | 配置 | 默认值 | 含义 |
 | --- | --- | --- |
 | `transform.input_language` | `text` | 输入编辑器的高亮语言 |
-| `transform.output_language` | `text` | 输出编辑器的高亮语言 |
+| `transform.output_language` | `text` | 函数未返回语言时，输出使用的默认语言；Markdown 默认预览 |
 | `transform.example` | 无 | 示例字符串；填写后显示“填入示例”按钮 |
 
 `transform` 及其各个配置均可省略。语言和示例必须是字符串；语言支持编辑器已有别名，未知语言按纯文本展示。多行示例可使用 YAML 的 `|` 写法。
@@ -317,7 +317,7 @@ export default function transform(input) {
 成功返回：
 
 ```js
-return { ok: true, output: "转换后的纯文本" };
+return { ok: true, output: "转换后的文本", language: "text" };
 ```
 
 输入校验不通过时返回：
@@ -326,7 +326,28 @@ return { ok: true, output: "转换后的纯文本" };
 return { ok: false, error: { message: "请检查输入格式" } };
 ```
 
-`output` 必须是字符串，空字符串也是合法结果。`error.message` 必须是非空字符串。输出始终按文本显示，不解释为 HTML。直接抛出的异常、缺少默认函数或不符合上述接口的返回值，会显示为运行错误。
+`output` 必须是字符串，空字符串也是合法结果。`error.message` 必须是非空字符串。直接抛出的异常、缺少默认函数或不符合上述接口的返回值，会显示为运行错误。
+
+成功结果可以返回可选的 `language` 字符串，例如 `json`、`python`、`markdown`。实际输出语言按 **返回的 `language` → `transform.output_language` → `text`** 的顺序确定，旧函数无需修改。空白语言视为未指定；非字符串语言产生运行错误。语言名称忽略大小写和首尾空白，支持 `md`、`py`、`js` 等编辑器已有别名；未知语言按纯文本展示。语言仅决定高亮和预览，不自动格式化或执行输出内容。
+
+例如，动态生成 Markdown：
+
+```js
+return { ok: true, output: "# 结果\n\n转换成功。", language: "markdown" };
+```
+
+Markdown（包括 `md`）输出默认显示预览，沿用普通代码片段的窗口、排版、代码块高亮和复制功能，也支持行内代码复制。输出区可切换“源代码 / 预览”，整体“复制 Markdown”始终复制原始输出，预览内的复制按钮只复制对应代码块。Markdown 中的原始 HTML 作为文字显示，不执行脚本。其他语言使用只读代码编辑器。
+
+输出窗口右上角的“全屏输出”可将代码或 Markdown 预览展开至整个正文区。再次点击或按 Esc 恢复，保留转换结果、预览 / 源码选择和当前视图状态。
+
+用户切换到 Markdown 源码后，同一语言的后续实时转换保留视图选择；成功结果切换为其他语言后，再返回 Markdown 时重新默认预览。等待、输入校验失败和运行错误期间不会重置视图选择。预览生成失败时，仍可查看和复制当前源码。
+
+可复制的输出语言示例：
+
+- [返回 JSON 语言](examples/transform-output-json.md)：覆盖文件中的默认语言。
+- [JSON 转 Python](examples/transform-json-to-python.md)：生成带 Python 高亮的变量赋值。
+- [JSON 转 Markdown](examples/transform-json-to-markdown.md)：预览、代码块和行内代码复制。
+- [动态输出语言](examples/transform-dynamic-language.md)：根据输入在 Markdown、JSON、Python 和纯文本间切换。
 
 ### 实时执行与状态
 

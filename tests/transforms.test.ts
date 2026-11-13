@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseSnippet } from '../scripts/content/parse';
-import { interpretTransformResult } from '../src/core/transform';
+import { interpretTransformResult, resolveTransformLanguage } from '../src/core/transform';
 import type { Diagnostic } from '../src/core/types';
 import tomorrowTheme from '../src/core/tomorrow.json' with { type: 'json' };
 import { highlightedCode, renderMarkdownPreview } from '../src/core/code-rendering';
@@ -56,5 +56,17 @@ describe('转换函数返回约定', () => {
   it('区分输入校验失败与非法返回值', () => {
     expect(interpretTransformResult({ ok: false, error: { message: '无效输入' } })).toEqual({ status: 'invalid', message: '无效输入' });
     for (const value of [null, 12, 'text', { ok: true, output: 1 }, { ok: false, error: 'bad' }, { ok: false, error: { message: '' } }]) expect(interpretTransformResult(value).status).toBe('error');
+  });
+  it('接受返回语言并兼容未指定或空白语言，拒绝非字符串语言', () => {
+    expect(interpretTransformResult({ ok: true, output: '# hi', language: ' md ' })).toEqual({ status: 'success', output: '# hi', language: 'md' });
+    expect(interpretTransformResult({ ok: true, output: '', language: '  ' })).toEqual({ status: 'success', output: '' });
+    for (const language of [null, 42, {}, [], false]) expect(interpretTransformResult({ ok: true, output: 'hi', language })).toMatchObject({ status: 'error', message: expect.stringContaining('language') });
+  });
+  it('返回语言优先于配置，兼容别名与大小写，未知语言仍是字符串', () => {
+    expect(resolveTransformLanguage(' MD ', 'json')).toBe('markdown');
+    expect(resolveTransformLanguage('py', 'markdown')).toBe('python');
+    expect(resolveTransformLanguage(' ', ' MD ')).toBe('markdown');
+    expect(resolveTransformLanguage()).toBe('text');
+    for (const language of ['custom', '__proto__', 'constructor']) expect(resolveTransformLanguage(language)).toBe(language);
   });
 });
