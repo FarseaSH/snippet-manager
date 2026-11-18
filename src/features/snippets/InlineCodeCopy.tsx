@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Check } from 'lucide-react';
+import { Check } from 'snippet-manager/icons/ui';
 import { copyText } from '../../services/clipboard';
 
 interface Feedback { target: HTMLElement; success: boolean }

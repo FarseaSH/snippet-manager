@@ -1,4 +1,4 @@
-import { Code2 } from 'lucide-react';
+import { Code2 } from 'snippet-manager/icons/ui';
 import { getLanguageIcon } from '../../core/language-icons';
 
 export function LanguageIcon({ language, size = 14 }: { language: string; size?: number }) {

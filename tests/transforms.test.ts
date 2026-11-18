@@ -45,7 +45,7 @@ describe('转换 Snippet 格式', () => {
 });
 
 describe('转换函数返回约定', () => {
-  it('动态输出高亮不修改供桌面编辑器使用的共享主题', async () => {
+  it('动态输出高亮不修改原始主题配置', async () => {
     await highlightedCode('{"result":true}', 'json');
     await renderMarkdownPreview('```js\nconsole.log("hello")\n```');
     expect(tomorrowTheme).toEqual(originalTheme);

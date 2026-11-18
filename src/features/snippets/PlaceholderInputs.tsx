@@ -1,8 +1,9 @@
-import { useId } from 'react';
-import { CalendarClock, CalendarDays, Clock3, Hash, Type } from 'lucide-react';
+import { lazy, Suspense, useId } from 'react';
+import { CalendarClock, CalendarDays, Clock3, Hash, Type } from 'snippet-manager/icons/ui';
 import { placeholderValue, splitDateValue, validatePlaceholderValue, type PlaceholderTemplate, type PlaceholderValues } from '../../core/placeholders';
 import { ParameterInput } from './ParameterInput';
-import { DateParameterInput } from './DateParameterInput';
+
+const DateParameterInput = lazy(() => import('./DateParameterInput').then(module => ({ default: module.DateParameterInput })));
 
 interface Props { template: PlaceholderTemplate; values: PlaceholderValues; onChange(name: string, value: string): void; onReset(): void }
 
@@ -33,7 +34,9 @@ export function PlaceholderInputs({ template, values, onChange, onReset }: Props
             <span className="placeholder-name">{field.name}</span>
             {rule && <span className="placeholder-rule">{rule}</span>}
           </label>
-          {field.type === 'date' ? <DateParameterInput field={field} value={value} id={inputId} describedBy={describedBy} onChange={next => onChange(field.name, next)} /> : <ParameterInput defaultText={field.defaultValue} id={inputId} aria-label={field.name} type="text" inputMode={field.type === 'number' ? 'decimal' : undefined} value={value ?? ''} aria-invalid={invalid} aria-describedby={describedBy} placeholder={field.defaultValue === undefined ? '填写后替换代码' : undefined} onChange={event => onChange(field.name, event.target.value)} />}
+          {field.type === 'date' ? <Suspense fallback={<div className="placeholder-date-input"><ParameterInput id={inputId} aria-label={`${field.name} ${typeLabel}`} aria-busy="true" disabled value={(value ?? '').replace('T', ' ')} defaultText={field.defaultValue?.replace('T', ' ')} icon={<TypeIcon size={15} />} /></div>}>
+            <DateParameterInput field={field} value={value} id={inputId} describedBy={describedBy} onChange={next => onChange(field.name, next)} />
+          </Suspense> : <ParameterInput defaultText={field.defaultValue} id={inputId} aria-label={field.name} type="text" inputMode={field.type === 'number' ? 'decimal' : undefined} value={value ?? ''} aria-invalid={invalid} aria-describedby={describedBy} placeholder={field.defaultValue === undefined ? '填写后替换代码' : undefined} onChange={event => onChange(field.name, event.target.value)} />}
           {hint && <div id={hintId} className={`placeholder-hint ${invalid ? 'is-invalid' : ''}`}>{hint}</div>}
         </div>;
       })}

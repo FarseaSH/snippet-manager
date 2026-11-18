@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'snippet-manager/icons/ui';
 import { InlineCodeCopy } from './InlineCodeCopy';
 
 interface Props { snippetPath: string; html: string; selectTab(id: string): void; descriptionKey?: string; className?: string; label?: string }

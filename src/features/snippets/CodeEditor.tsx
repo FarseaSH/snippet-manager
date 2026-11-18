@@ -10,43 +10,43 @@ export function CodeEditor({ snippet, ref, editable = false, onChange, ariaLabel
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const hostRef = useRef<HTMLDivElement>(null);
   const fallbackRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
+  const editorRef = useRef<import('@codemirror/view').EditorView | null>(null);
+  const runtimeRef = useRef<typeof import('./codemirror-runtime')>(undefined);
   const codeRef = useRef(snippet.code);
+  const languageRef = useRef(snippet.language);
+  const editableRef = useRef(editable);
   const onChangeRef = useRef(onChange);
   useLayoutEffect(() => { onChangeRef.current = onChange; }, [onChange]);
   useLayoutEffect(() => {
-    const input = editorRef.current?.getDomNode()?.querySelector('textarea');
+    const view = editorRef.current;
+    const input = view?.contentDOM;
     if (!input) return;
-    if (invalid !== undefined) input.setAttribute('aria-invalid', String(invalid));
+    input.setAttribute('aria-label', ariaLabel || `${snippet.title}，只读代码编辑器`);
+    input.setAttribute('aria-readonly', String(!editable));
+    if (invalid !== undefined) input.setAttribute('aria-invalid', String(invalid)); else input.removeAttribute('aria-invalid');
     if (describedBy) input.setAttribute('aria-describedby', describedBy); else input.removeAttribute('aria-describedby');
-  }, [invalid, describedBy, status]);
+    runtimeRef.current?.setEditable(view!, editable);
+  }, [invalid, describedBy, status, ariaLabel, snippet.title, editable]);
   useLayoutEffect(() => { codeRef.current = snippet.code; }, [snippet.code]);
+  useLayoutEffect(() => { languageRef.current = snippet.language; editableRef.current = editable; }, [snippet.language, editable]);
   useLayoutEffect(() => {
-    const editor = editorRef.current;
-    const model = editor?.getModel();
-    if (!editor || !model) return;
-    const current = model.getValue();
-    const next = snippet.code.replace(/\r\n|\r|\n/g, model.getEOL());
-    if (current === next) return;
-    const state = editor.saveViewState();
-    let start = 0;
-    let end = 0;
-    while (start < current.length && start < next.length && current[start] === next[start]) start++;
-    while (end < current.length - start && end < next.length - start && current[current.length - end - 1] === next[next.length - end - 1]) end++;
-    const from = model.getPositionAt(start);
-    const to = model.getPositionAt(current.length - end);
-    model.applyEdits([{ range: { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column }, text: next.slice(start, next.length - end) }]);
-    if (state) editor.restoreViewState(state);
+    if (editorRef.current) runtimeRef.current?.replaceCode(editorRef.current, snippet.code);
   }, [snippet.code, status]);
+  useEffect(() => {
+    const view = editorRef.current;
+    if (view) runtimeRef.current?.setLanguage(view, snippet.language).catch(() => {
+      if (editorRef.current === view) runtimeRef.current?.setLanguage(view, 'text');
+    });
+  }, [snippet.language, status]);
   useImperativeHandle(ref, () => ({
     saveViewState() {
       const editor = editorRef.current;
-      const state = editor?.saveViewState();
+      const restore = editor && runtimeRef.current?.saveViewState(editor);
       const fallback = fallbackRef.current;
       const top = fallback?.scrollTop ?? 0;
       const left = fallback?.scrollLeft ?? 0;
       return () => {
-        if (editor && editorRef.current === editor && state) { editor.layout(); editor.restoreViewState(state); }
+        if (editor && editorRef.current === editor) restore?.();
         if (fallback && fallbackRef.current === fallback) { fallback.scrollTop = top; fallback.scrollLeft = left; }
       };
     },
@@ -64,35 +64,21 @@ export function CodeEditor({ snippet, ref, editable = false, onChange, ariaLabel
     let cancelled = false;
     let dispose: (() => void) | undefined;
     setStatus('loading');
-    import('./monaco-runtime').then(({ monaco, editorLanguage }) => {
+    import('./codemirror-runtime').then(async runtime => {
       if (cancelled || !hostRef.current) return;
-      const model = monaco.editor.createModel(codeRef.current, editorLanguage(snippet.language));
-      dispose = () => model.dispose();
-      const editor = monaco.editor.create(hostRef.current, {
-        model, theme: 'tomorrow', readOnly: !editable, domReadOnly: !editable,
-        ariaLabel: ariaLabel || `${snippet.title}，只读代码编辑器`, tabFocusMode: true, editContext: false,
-        fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-code').trim(),
-        fontSize: 13, lineHeight: 22, fontLigatures: false, tabSize: 4,
-        minimap: { enabled: false }, lineNumbers: 'on', lineNumbersMinChars: 3,
-        folding: true, showFoldingControls: 'always', glyphMargin: false,
-        guides: { indentation: true, bracketPairs: true }, matchBrackets: 'always',
-        scrollBeyondLastLine: false, wordWrap: 'off', renderWhitespace: 'selection',
-        renderLineHighlight: 'all', renderLineHighlightOnlyWhenFocus: true,
-        renderValidationDecorations: 'off', padding: { top: 16, bottom: 16 },
-        scrollbar: { alwaysConsumeMouseWheel: false, verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
-        overviewRulerLanes: 0, hideCursorInOverviewRuler: true,
-        hover: { enabled: 'off' }, contextmenu: true,
+      runtimeRef.current = runtime;
+      const editor = runtime.createEditor(hostRef.current, codeRef.current, editableRef.current, value => {
+        if (editableRef.current) onChangeRef.current?.(value);
       });
       editorRef.current = editor;
-      const listener = editable ? editor.onDidChangeModelContent(() => onChangeRef.current?.(model.getValue())) : undefined;
-      const observer = new ResizeObserver(() => editor.layout());
+      const observer = new ResizeObserver(() => editor.requestMeasure());
       observer.observe(hostRef.current);
-      dispose = () => { editorRef.current = null; listener?.dispose(); observer.disconnect(); editor.dispose(); model.dispose(); };
-      editor.layout();
-      setStatus('ready');
+      dispose = () => { if (editorRef.current === editor) editorRef.current = null; observer.disconnect(); runtime.destroyEditor(editor); };
+      await runtime.setLanguage(editor, languageRef.current).catch(() => runtime.setLanguage(editor, 'text'));
+      if (!cancelled) setStatus('ready');
     }).catch(() => { dispose?.(); dispose = undefined; if (!cancelled) setStatus('error'); });
     return () => { cancelled = true; dispose?.(); };
-  }, [touch, snippet.language, snippet.title, editable, ariaLabel]);
+  }, [touch]);
 
   if ((touch || status === 'error') && editable) return <textarea className="transform-textarea" aria-label={ariaLabel} aria-invalid={invalid} aria-describedby={describedBy} value={snippet.code} onChange={event => onChange?.(event.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" />;
   if (touch || status === 'error') return <div className="code-fallback highlighted-code" ref={fallbackRef} role={ariaLabel ? 'textbox' : undefined} aria-label={ariaLabel} aria-readonly={ariaLabel ? true : undefined} aria-multiline={ariaLabel ? true : undefined}>

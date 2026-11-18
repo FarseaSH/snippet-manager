@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
 import DatePicker from 'react-datepicker';
 import { zhCN } from 'date-fns/locale/zh-CN';
-import { CalendarClock, CalendarDays, Clock3 } from 'lucide-react';
+import { CalendarClock, CalendarDays, Clock3 } from 'snippet-manager/icons/ui';
 import { splitDateValue, validatePlaceholderValue, type PlaceholderField } from '../../core/placeholders';
 import { ParameterInput } from './ParameterInput';
-import 'react-datepicker/dist/react-datepicker.css';
+import './date-picker.css';
 
 interface Props {
   field: PlaceholderField;

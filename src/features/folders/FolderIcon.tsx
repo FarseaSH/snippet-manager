@@ -1,4 +1,4 @@
-import { Folder } from 'lucide-react';
+import { Folder } from 'snippet-manager/icons/ui';
 import { getLanguageIcon } from '../../core/language-icons';
 import { LanguageIcon } from '../snippets/LanguageIcon';
 

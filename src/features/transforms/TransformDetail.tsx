@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftRight, Check, Code2, Copy, Maximize2, Minimize2, Zap } from 'lucide-react';
+import { ArrowLeftRight, Check, Code2, Copy, Maximize2, Minimize2, Zap } from 'snippet-manager/icons/ui';
 import type { Snippet, SubSnippet } from '../../core/types';
 import { copyText } from '../../services/clipboard';
 import { CodeEditor } from '../snippets/CodeEditor';

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Library } from 'lucide-react';
+import { ChevronDown, ChevronRight, Library } from 'snippet-manager/icons/ui';
 import type { Folder } from '../../core/types';
 import { FolderIcon } from './FolderIcon';
 

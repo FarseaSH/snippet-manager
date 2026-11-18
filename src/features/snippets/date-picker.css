@@ -1,0 +1,2 @@
+/* Keep vendor rules below app styles regardless of when this lazy CSS loads. */
+@import 'react-datepicker/dist/react-datepicker.css' layer(datepicker);

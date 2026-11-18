@@ -4,10 +4,11 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { editorSnapshot, setEditorScroll } from './editor-helpers';
 
 const production = process.env.APP_TEST_MODE === 'production';
 const contentRoot = process.env.SNIPPETS_DIR || path.resolve('snippets');
-const renderedLines = (page: Page) => page.locator('.code-fallback .line-numbers span, .monaco-editor .margin-view-overlays .line-numbers');
+const renderedLines = (page: Page) => page.locator('.code-fallback .line-numbers span, .cm-lineNumbers .cm-gutterElement:visible');
 test('目录图标继承与覆盖，列表路径和窄屏入口一致，配置修改实时生效', async ({ page }) => {
   test.skip(production, '使用临时目录与图标配置验证开发实时读取');
   const prefix = `__Folder-icons-${process.pid}`;
@@ -68,7 +69,7 @@ const readClipboard = (page: Page) => page.evaluate(async () => (await navigator
 async function readEditorCode(page: Page) {
   if (await page.locator('.code-fallback').count()) return (await page.locator('.code-fallback .code-source code').textContent())!;
   await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
-  const textarea = page.locator('.monaco-editor textarea');
+  const textarea = page.locator('.cm-content');
   await textarea.focus();
   const modifier = await page.evaluate(() => navigator.platform.includes('Mac') ? 'Meta' : 'Control');
   await page.keyboard.press(`${modifier}+A`);
@@ -79,33 +80,23 @@ async function readEditorCode(page: Page) {
 test('编辑器首次加载即显示折叠箭头，收起与展开切换正常', async ({ page }) => {
   await page.goto('snippet/python/files/read-json');
   await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
-  const expanded = page.locator('.codicon-folding-expanded').first();
+  const expanded = page.locator('.editor-fold-toggle[data-fold="open"]').first();
   await expect(expanded).toBeVisible();
-  const font = await expanded.evaluate(async el => {
-    const glyph = getComputedStyle(el, '::before').content;
-    await document.fonts.load('16px codicon');
-    return {
-      family: getComputedStyle(el).fontFamily,
-      loaded: [...document.fonts].some(face => face.family.replace(/["']/g, '') === 'codicon' && face.status === 'loaded'),
-      glyph,
-    };
-  });
-  expect(font.family).toContain('codicon');
-  expect(font.loaded).toBe(true);
-  expect(font.glyph).not.toBe('none');
+  const chevron = await expanded.evaluate(el => getComputedStyle(el, '::before').transform);
+  expect(chevron).not.toBe('none');
   await page.locator('.code-editor').screenshot({ path: 'test-results/folding-expanded.png' });
   await expanded.click();
-  const collapsed = page.locator('.codicon-folding-collapsed').first();
+  const collapsed = page.locator('.editor-fold-toggle[data-fold="closed"]:visible').first();
   await expect(collapsed).toBeVisible();
-  expect(await collapsed.evaluate(el => getComputedStyle(el, '::before').content)).not.toBe(font.glyph);
-  await expect(page.locator('.view-lines')).not.toContainText('data = json.load');
+  expect(await collapsed.evaluate(el => getComputedStyle(el, '::before').transform)).not.toBe(chevron);
+  await expect(page.locator('.cm-content')).not.toContainText('data = json.load');
   await page.locator('.code-editor').screenshot({ path: 'test-results/folding-collapsed.png' });
   await collapsed.click();
   await expect(expanded).toBeVisible();
-  await expect(page.locator('.view-lines')).toContainText('data = json.load');
+  await expect(page.locator('.cm-content')).toContainText('data = json.load');
 });
 
-test('Monaco 只读编辑器支持精确复制与查找，切换代码和窄屏正常', async ({ page, context }) => {
+test('CodeMirror 只读编辑器支持精确复制与查找，切换代码和窄屏正常', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -115,7 +106,7 @@ test('Monaco 只读编辑器支持精确复制与查找，切换代码和窄屏�
   const source = await readEditorCode(page);
   expect(source).toContain('    params={"page": 1, "limit": 20},');
   expect(source).toContain('\n\nresponse');
-  await expect(page.locator('.monaco-editor textarea')).toHaveAttribute('readonly', 'true');
+  await expect(page.locator('.cm-content')).toHaveAttribute('aria-readonly', 'true');
   await page.keyboard.type('this must not change the snippet');
   expect(await readEditorCode(page)).toBe(source);
   const modifier = await page.evaluate(() => navigator.platform.includes('Mac') ? 'Meta' : 'Control');
@@ -123,9 +114,10 @@ test('Monaco 只读编辑器支持精确复制与查找，切换代码和窄屏�
   const find = page.getByRole('textbox', { name: 'Find', exact: true });
   await expect(find).toBeVisible();
   await find.fill('requests');
-  await expect(page.getByRole('dialog', { name: 'Find / Replace' }).locator('.matchesCount')).toContainText('of');
+  await find.press('Enter');
+  await expect(page.locator('.cm-searchMatch')).not.toHaveCount(0);
   await page.keyboard.press('Escape');
-  await page.screenshot({ path: 'test-results/monaco-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/codemirror-desktop.png', fullPage: true });
   await page.getByRole('tab', { name: 'JSON Response' }).click();
   expect(await readEditorCode(page)).toBe('data = response.json()\nprint(data)');
   await expect(page.locator('.code-statusbar .line-count, .code-statusbar .editor-mode')).toHaveCount(0);
@@ -134,10 +126,10 @@ test('Monaco 只读编辑器支持精确复制与查找，切换代码和窄屏�
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.code-fallback')).toBeVisible();
-  await expect(page.locator('.monaco-editor')).toHaveCount(0);
+  await expect(page.locator('.cm-editor')).toHaveCount(0);
   await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
   expect(await readClipboard(page)).toBe('data = response.json()\nprint(data)');
-  await page.screenshot({ path: 'test-results/monaco-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/codemirror-mobile.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
   expect(await readEditorCode(page)).toBe('data = response.json()\nprint(data)');
@@ -152,21 +144,20 @@ test('长代码完整复制、折叠与滚动，JSON 高亮及旧模型释放', 
   const json = '{\n  "ok": true\n}';
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  const runtime = new URL('src/features/snippets/monaco-runtime.ts', test.info().project.use.baseURL).href;
-  const modelCount = () => page.evaluate(async url => (await import(/* @vite-ignore */ url)).monaco.editor.getModels().length, runtime);
+  const modelCount = () => page.locator('.cm-editor').count();
   try {
     await fs.writeFile(file, `---\nsnippet_name: Editor Long Smoke\nsnippet_tags: []\n---\n\n# Long Python\n\n\`\`\`py\n${source}\n\`\`\`\n\n# JSON\n\n\`\`\`json\n${json}\n\`\`\``);
     await page.goto(`snippet/__editor-long-${process.pid}`);
     await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
-    await expect(page.locator('.codicon-folding-expanded').first()).toBeVisible();
-    await page.locator('.codicon-folding-expanded').first().click();
-    await expect(page.locator('.codicon-folding-collapsed').first()).toBeVisible();
+    await expect(page.locator('.editor-fold-toggle[data-fold="open"]').first()).toBeVisible();
+    await page.locator('.editor-fold-toggle[data-fold="open"]').first().click();
+    await expect(page.locator('.editor-fold-toggle[data-fold="closed"]:visible').first()).toBeVisible();
     expect(await readEditorCode(page)).toBe(source);
     await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
     expect(await readClipboard(page)).toBe(source);
     await expect(page.locator('.code-statusbar .line-count, .code-statusbar .editor-mode')).toHaveCount(0);
     const modifier = await page.evaluate(() => navigator.platform.includes('Mac') ? 'Meta' : 'Control');
-    await page.locator('.monaco-editor textarea').focus();
+    await page.locator('.cm-content').focus();
     await page.keyboard.press(modifier === 'Meta' ? 'Meta+ArrowDown' : 'Control+End');
     await expect(renderedLines(page)).toContainText([String(source.split('\n').length)]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -681,7 +672,7 @@ test('四种复制对象正确，深层链接可刷新，Raw 文件保持原文'
     await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
   }
   await expect(renderedLines(page)).toHaveText(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
-  await expect(page.locator('.code-fallback .line-numbers, .monaco-editor .margin')).toHaveAttribute('aria-hidden', 'true');
+  await expect(page.locator('.code-fallback .line-numbers, .cm-gutters')).toHaveAttribute('aria-hidden', 'true');
   await page.getByRole('tab', { name: 'JSON Response' }).click();
   await expect(renderedLines(page)).toHaveText(['1', '2']);
   await page.getByRole('tab', { name: 'POST Request' }).click();
@@ -993,19 +984,10 @@ test('展开代码仅占正文区，保留当前代码和编辑器状态，按�
     await page.getByRole('tab', { name: 'Long', exact: true }).click();
     const editor = page.locator('.code-editor');
     await expect(editor).toHaveAttribute('data-state', 'ready');
-    await page.locator('.codicon-folding-expanded').first().click();
-    await expect(page.locator('.codicon-folding-collapsed')).toHaveCount(1);
-    const editorState = () => page.evaluate(async () => {
-      const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
-      const { monaco } = await import(moduleUrl);
-      const instance = monaco.editor.getEditors()[0];
-      return { top: instance.getScrollTop(), model: instance.getModel().id, folding: instance.saveViewState().contributionsState['editor.contrib.folding'] };
-    });
-    await page.evaluate(async () => {
-      const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
-      const { monaco } = await import(moduleUrl);
-      monaco.editor.getEditors()[0].setScrollTop(1500);
-    });
+    await page.locator('.editor-fold-toggle[data-fold="open"]').first().click();
+    await expect(page.locator('.editor-fold-toggle[data-fold="closed"]:visible')).toHaveCount(1);
+    const editorState = () => editorSnapshot(page);
+    await setEditorScroll(page, 1500);
     const before = await editorState();
     const sidebar = await page.locator('.sidebar').boundingBox();
     const list = await page.locator('.snippet-panel').boundingBox();
@@ -1025,24 +1007,20 @@ test('展开代码仅占正文区，保留当前代码和编辑器状态，按�
     await page.getByRole('button', { name: '复制当前代码', exact: true }).click();
     expect((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(source);
     expect((await editorState()).model).toBe(before.model);
-    expect((await editorState()).folding).toEqual(before.folding);
     await page.screenshot({ path: 'test-results/code-focused-desktop.png' });
     // Escape also works while the editor has keyboard focus.
-    await page.locator('.monaco-editor textarea').focus();
+    await page.locator('.cm-content').focus();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('button', { name: '展开代码', exact: true })).toBeFocused();
     await expect(page.getByRole('tab', { name: 'Long', exact: true })).toHaveAttribute('aria-selected', 'true');
     await expect.poll(editorState).toEqual(before);
-    expect((await editorState()).folding).toEqual(before.folding);
     await page.getByRole('button', { name: '展开代码', exact: true }).click();
-    await page.evaluate(async () => {
-      const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
-      const { monaco } = await import(moduleUrl);
-      monaco.editor.getEditors()[0].setScrollTop(1800);
-    });
+    await setEditorScroll(page, 1800);
     const changed = await editorState();
     await page.getByRole('button', { name: '恢复正文' }).click();
     await expect.poll(editorState).toEqual(changed);
+    await setEditorScroll(page, 0);
+    await expect(page.locator('.editor-fold-toggle[data-fold="closed"]:visible')).toHaveCount(1);
     await page.getByRole('button', { name: '展开代码', exact: true }).click();
     await page.locator('.snippet-item').filter({ hasText: 'Without Code' }).click();
     await expect(page.locator('.empty-code')).toBeVisible();
@@ -1134,20 +1112,12 @@ test('Markdown 默认预览、底栏切换、代码块复制与展开阅读，�
     await expect(page.locator('.code-editor')).toBeVisible();
     await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
     await page.screenshot({ path: 'test-results/markdown-source-desktop.png' });
-    await page.evaluate(async () => {
-      const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
-      const { monaco } = await import(moduleUrl);
-      monaco.editor.getEditors()[0].setScrollTop(300);
-    });
+    await setEditorScroll(page, 300);
     await page.getByRole('button', { name: '切换到预览' }).click();
     await expect(preview).toBeVisible();
     expect(await preview.evaluate(el => el.scrollTop)).toBe(previewTop);
     await page.getByRole('button', { name: '查看源代码' }).click();
-    expect(await page.evaluate(async () => {
-      const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
-      const { monaco } = await import(moduleUrl);
-      return monaco.editor.getEditors()[0].getScrollTop();
-    })).toBe(300);
+    await expect.poll(async () => (await editorSnapshot(page)).top).toBe(300);
     await page.getByRole('button', { name: '切换到预览' }).click();
     await page.getByRole('button', { name: '展开代码', exact: true }).click();
     await expect(preview).toBeVisible();

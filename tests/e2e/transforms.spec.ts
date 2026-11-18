@@ -10,11 +10,7 @@ async function input(page: Page, value: string) {
   const native = page.locator('.transform-textarea');
   if (await native.count()) { await native.fill(value); return; }
   await expect(page.locator('.transform-editor').first().locator('.code-editor')).toHaveAttribute('data-state', 'ready');
-  await page.evaluate(async value => {
-    const moduleUrl = '/src/features/snippets/monaco-runtime.ts';
-    const { monaco } = await import(moduleUrl);
-    monaco.editor.getEditors().find((editor: { getRawOptions(): { ariaLabel?: string } }) => editor.getRawOptions().ariaLabel === '转换输入').setValue(value);
-  }, value);
+  await page.getByRole('textbox', { name: '转换输入', exact: true }).fill(value);
 }
 async function writeCode(code: string, config = '') {
   await fs.writeFile(file, '---\nsnippet_name: Transform Runtime\nsnippet_tags: [transform]\nsnippet_type: transform\n' + config + '---\n\n# 转换代码\n\n```js\n' + code + '\n```');

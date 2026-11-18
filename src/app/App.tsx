@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type MouseEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowDownToLine, ArrowLeft, ArrowLeftRight, ArrowRight, Braces, Check, Code2, FileText, Folder as FolderGlyph, LoaderCircle, Search, SearchX, Settings, WifiOff, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeft, ArrowLeftRight, ArrowRight, Braces, Check, Code2, FileText, Folder as FolderGlyph, LoaderCircle, Search, SearchX, Settings, WifiOff, X } from 'snippet-manager/icons/ui';
 import { useContent } from './useContent';
 import { ResizablePanes } from './ResizablePanes';
 import { usePwa } from '../pwa/usePwa';

@@ -1,4 +1,4 @@
-import { ArrowLeftRight, FileCode2, FileText, Link } from 'lucide-react';
+import { ArrowLeftRight, FileCode2, FileText, Link } from 'snippet-manager/icons/ui';
 import type { Snippet } from '../../core/types';
 import { encodePath, pagePath } from '../../core/paths';
 import { copyText } from '../../services/clipboard';

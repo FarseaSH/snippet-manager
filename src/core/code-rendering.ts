@@ -16,7 +16,7 @@ import type { SubSnippet, MarkdownPreviewData } from './types.ts';
 type ResolveLink = (url: string, kind: 'link' | 'image') => string;
 type ResolveTab = (title: string) => SubSnippet | undefined;
 
-// Shiki normalizes theme rules in place. Keep Monaco's shared JSON untouched.
+// Shiki normalizes theme rules in place. Keep the source theme JSON untouched.
 const highlightTheme = { ...structuredClone(tomorrowTheme), type: 'light' as const };
 
 // Reuse the app's theme without shipping Shiki's unused theme collection.

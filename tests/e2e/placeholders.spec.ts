@@ -1,3 +1,4 @@
+import { editorSnapshot, setEditorScroll } from './editor-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -75,6 +76,37 @@ test('占位符参数实时替换、校验、重置和 Tab 独立保存，原始
   const response = await request.get(`raw/${name}.md`);
   expect(await response.text()).toBe(raw);
   expect(errors).toEqual([]);
+});
+
+test('日期控件仅在日期 Tab 打开后加载，加载期间保留参数布局和默认值', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', request => requests.push(request.url()));
+  let release!: () => void;
+  const loading = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/DateParameterInput.tsx*', async route => { await loading; await route.continue(); });
+  try {
+    await page.goto(route);
+    const form = page.getByRole('region', { name: '代码参数', exact: true });
+    await expect(form.getByLabel('name', { exact: true })).toBeEnabled();
+    expect(requests.some(url => /DateParameterInput|react-datepicker|date-fns/.test(url))).toBe(false);
+    const brands = requests.find(url => url.includes('/deps/snippet-manager_icons_brands.js'));
+    expect(brands).toBeDefined();
+    // Include the inline source map: unused brand data must not inflate dev pages.
+    const brandResponse = await page.request.get(brands!);
+    expect((await brandResponse.body()).byteLength).toBeLessThan(150_000);
+    const dateRequest = page.waitForRequest('**/DateParameterInput.tsx*');
+    await page.getByRole('tab', { name: '日期与时间', exact: true }).click();
+    await dateRequest;
+    const start = form.getByLabel('start 日期和时间', { exact: true });
+    await expect(start).toBeDisabled();
+    await expect(start).toHaveAttribute('aria-busy', 'true');
+    await expect(start).toHaveValue('2026-11-10 14:30:25');
+    release();
+    await expect(start).toBeEnabled();
+    await start.click();
+    await expect(page.locator('.parameter-calendar')).toBeVisible();
+    expect(requests.some(url => /\/deps\/(?:simple-icons|lucide-react)\.js/.test(url))).toBe(false);
+  } finally { release(); }
 });
 
 test('日期时间共用输入和选择弹层，支持秒、仅日期和仅时间并同步替换', async ({ page }) => {
@@ -162,33 +194,24 @@ test('日期时间共用输入和选择弹层，支持秒、仅日期和仅时�
   }
 });
 
-test('替换更新 Monaco 原模型，保留折叠和编辑器滚动位置', async ({ page }) => {
+test('替换更新 CodeMirror 原模型，保留折叠和编辑器滚动位置', async ({ page }) => {
   const source = 'def example():\n    print("@name::original@")\n    return 1\n\n' + Array.from({ length: 160 }, (_, i) => `print("line-${i}")`).join('\n');
   await fs.writeFile(file, '---\nsnippet_name: Model Parameters\nsnippet_tags: []\n---\n\n# Long\n\n```python\n' + source + '\n```');
   await page.goto(route);
   await expect(page.locator('.code-editor')).toHaveAttribute('data-state', 'ready');
-  await page.locator('.codicon-folding-expanded').first().click();
-  const state = () => page.evaluate(async () => {
-    const url = '/src/features/snippets/monaco-runtime.ts';
-    const { monaco } = await import(url);
-    const editor = monaco.editor.getEditors()[0];
-    const folding = editor.saveViewState().contributionsState['editor.contrib.folding'];
-    return { id: editor.getModel().id, top: editor.getScrollTop(), models: monaco.editor.getModels().length, folding: folding.collapsedRegions.map((region: { startLineNumber: number; endLineNumber: number; isCollapsed: boolean }) => ({ start: region.startLineNumber, end: region.endLineNumber, collapsed: region.isCollapsed })) };
-  });
-  await page.evaluate(async () => {
-    const url = '/src/features/snippets/monaco-runtime.ts';
-    const { monaco } = await import(url);
-    monaco.editor.getEditors()[0].setScrollTop(1200);
-  });
+  await page.locator('.editor-fold-toggle[data-fold="open"]').first().click();
+  const state = () => editorSnapshot(page);
+  await setEditorScroll(page, 1200);
   const before = await state();
   await page.getByLabel('name', { exact: true }).fill('updated');
   await page.locator('.copy-code').click();
   expect(await clipboard(page)).toContain('print("updated")');
   const after = await state();
-  expect(after.id).toBe(before.id);
-  expect(after.models).toBe(1);
-  expect(after.folding).toEqual(before.folding);
+  expect(after.model).toBe(before.model);
+  expect(await page.locator('.cm-editor').count()).toBe(1);
   expect(after.top).toBe(before.top);
+  await setEditorScroll(page, 0);
+  await expect(page.locator('.editor-fold-toggle[data-fold="closed"]:visible')).toHaveCount(1);
 });
 
 test('Markdown 预览、源码和内嵌代码块复制同步替换，并安全显示输入', async ({ page }) => {

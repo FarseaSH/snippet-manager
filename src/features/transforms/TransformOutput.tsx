@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Check, Code2, Copy, Eye, Maximize2, Minimize2 } from 'lucide-react';
+import { Check, Code2, Copy, Eye, Maximize2, Minimize2 } from 'snippet-manager/icons/ui';
 import type { SubSnippet } from '../../core/types';
 import { resolveTransformLanguage } from '../../core/transform';
 import { copyText } from '../../services/clipboard';
