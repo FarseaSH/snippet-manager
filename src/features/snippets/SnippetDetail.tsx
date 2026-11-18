@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Check, Code2, Copy, Eye, Maximize2, Minimize2 } from 'snippet-manager/icons/ui';
+import { Check, Code2, Copy, Eye, Maximize2, Minimize2, RotateCcw } from 'snippet-manager/icons/ui';
 import type { Snippet } from '../../core/types';
 import { copyText } from '../../services/clipboard';
 import { SnippetDescription } from './SnippetDescription';
@@ -12,6 +12,7 @@ import { TabOutline } from './TabOutline';
 import { useRenderedCode } from './useRenderedCode';
 import { SnippetHeading } from './SnippetHeading';
 import { TransformDetail } from '../transforms/TransformDetail';
+import { HtmlPreview, type HtmlPreviewHandle } from './HtmlPreview';
 
 interface Props { snippet: Snippet; initialTab?: string; showTitle?: boolean; notify(message: string): void }
 
@@ -23,6 +24,8 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
   const [active, setActive] = useState(initialTab || snippet.subSnippets[0]?.id || '');
   const [showSource, setShowSource] = useState(false);
   const previewRef = useRef<CodeEditorHandle>(null);
+  const htmlPreviewRef = useRef<HtmlPreviewHandle>(null);
+  const [visitedHtml, setVisitedHtml] = useState<{ path: string; ids: Set<string> }>({ path: snippet.path, ids: new Set() });
   const modeViews = useRef<{ preview?: () => void; source?: () => void }>({});
   const [focused, setFocused] = useState(false);
   const editorRef = useRef<CodeEditorHandle>(null);
@@ -55,7 +58,18 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
   }
   useEffect(() => { setParameters({ path: snippet.path, tabs: {} }); }, [snippet.path]);
   const isMarkdown = Boolean(sub?.markdownPreview);
-  const isPreview = isMarkdown && !showSource;
+  const isHtml = !!sub && ['html', 'html5', 'htm'].includes(sub.language.trim().toLowerCase());
+  const isPreviewable = isMarkdown || isHtml;
+  const isPreview = isPreviewable && !showSource;
+  const previewFiles = useMemo(() => snippet.subSnippets.map(part => ({
+    id: part.id, title: part.title, language: part.language,
+    code: replacePlaceholders(part.code, parsePlaceholders(part.code), parameters.path === snippet.path ? parameters.tabs[part.id] ?? {} : {}),
+  })), [snippet, parameters]);
+  useLayoutEffect(() => {
+    if (isHtml && sub && (visitedHtml.path !== snippet.path || !visitedHtml.ids.has(sub.id))) {
+      setVisitedHtml(previous => ({ path: snippet.path, ids: new Set([...(previous.path === snippet.path ? previous.ids : []), sub.id]) }));
+    }
+  }, [isHtml, sub?.id, snippet.path, visitedHtml]);
   const hasTabs = snippet.subSnippets.length > 1;
   useEffect(() => { setCopied(false); clearTimeout(copyTimer.current); }, [sub?.id, code]);
   useLayoutEffect(() => { setFocused(false); setShowSource(false); modeViews.current = {}; restoreEditor.current = undefined; }, [snippet.path, sub?.id]);
@@ -68,6 +82,7 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
     if (!focused) return;
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        if (document.querySelector('.html-code-dialog:modal')) return;
         event.preventDefault();
         restoreEditor.current = saveCodeViewState();
         setFocused(false);
@@ -78,7 +93,7 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
   }, [focused, sub?.id]);
   function saveCodeViewState() {
     const restoreSource = editorRef.current?.saveViewState();
-    const restorePreview = previewRef.current?.saveViewState();
+    const restorePreview = (isHtml ? htmlPreviewRef.current : previewRef.current)?.saveViewState();
     return () => { restoreSource?.(); restorePreview?.(); };
   }
   useLayoutEffect(() => {
@@ -87,7 +102,7 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
   }, [showSource]);
   function toggleSource() {
     if (showSource) modeViews.current.source = editorRef.current?.saveViewState();
-    else modeViews.current.preview = previewRef.current?.saveViewState();
+    else modeViews.current.preview = (isHtml ? htmlPreviewRef.current : previewRef.current)?.saveViewState();
     setShowSource(value => !value);
   }
   function toggleFocus() {
@@ -129,26 +144,30 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
         <div className={`code-window-bar ${isPreview ? '' : 'is-floating'}`}>
           {isPreview && <>
             <div className="window-traffic-lights" aria-hidden="true"><span className="window-dot red" /><span className="window-dot yellow" /><span className="window-dot green" /></div>
-            <span className="code-window-title">Markdown 预览</span>
+            <span className="code-window-title">{isHtml ? 'HTML' : 'Markdown'} 预览</span>
           </>}
           <button ref={expandButtonRef} type="button" className="icon-button code-expand" aria-label={focused ? '恢复正文' : '展开代码'} title={focused ? '恢复正文（Esc）' : '展开代码'} aria-pressed={focused} aria-controls="code-panel" onClick={toggleFocus}>
             {focused ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
         </div>
         <div className="code-views">
-          <div className={`code-view ${isMarkdown && !showSource ? 'is-inactive' : ''}`}>
+          <div className={`code-view ${isPreviewable && !showSource ? 'is-inactive' : ''}`}>
             <CodeEditor ref={editorRef} key={`${snippet.path}:${sub.id}`} snippet={displaySub!} />
           </div>
           {isMarkdown && <div className={`code-view ${showSource ? 'is-inactive' : ''}`}>
             {displaySub?.markdownPreview ? <MarkdownPreview ref={previewRef} key={`${snippet.path}:${sub.id}`} preview={displaySub.markdownPreview} notify={notify} /> : <div className="markdown-preview" role="status">{renderError ? '预览暂不可用，请查看源代码。' : '正在更新预览…'}</div>}
           </div>}
+          {previewFiles.filter(file => ['html', 'html5', 'htm'].includes(file.language.trim().toLowerCase()) && ((visitedHtml.path === snippet.path && visitedHtml.ids.has(file.id)) || file.id === sub.id)).map(file => <div key={`${snippet.path}:${file.id}`} className={`code-view ${!isHtml || file.id !== sub.id || showSource ? 'is-inactive' : ''}`}>
+            <HtmlPreview ref={file.id === sub.id ? htmlPreviewRef : undefined} entry={file} files={previewFiles} onEscape={() => setFocused(false)} />
+          </div>)}
         </div>
         <footer className="code-statusbar" aria-label="当前代码状态栏">
-          <span className="language"><LanguageIcon language={sub.language} size={16} />{isMarkdown ? 'Markdown' : sub.language === 'text' ? 'Plain Text' : sub.language}</span>
-          {isMarkdown && <button type="button" className="code-view-toggle" aria-label={showSource ? '切换到预览' : '查看源代码'} onClick={toggleSource}>
+          <span className="language"><LanguageIcon language={sub.language} size={16} />{isHtml ? 'HTML' : isMarkdown ? 'Markdown' : sub.language === 'text' ? 'Plain Text' : sub.language}</span>
+          {isPreviewable && <button type="button" className="code-view-toggle" aria-label={showSource ? '切换到预览' : '查看源代码'} onClick={toggleSource}>
             {showSource ? <Eye size={16} /> : <Code2 size={16} />}{showSource ? '预览' : '源代码'}
           </button>}
-          <button className={`copy-code ${copied ? 'copied' : ''}`} onClick={() => void copy(code, '代码已复制', true)}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? '已复制' : isMarkdown ? '复制 Markdown' : '复制当前代码'}</button>
+          {isHtml && <button type="button" className="code-view-toggle" aria-label="重新运行 HTML" onClick={() => htmlPreviewRef.current?.rerun()}><RotateCcw size={15} />重新运行</button>}
+          <button className={`copy-code ${copied ? 'copied' : ''}`} onClick={() => void copy(code, '代码已复制', true)}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? '已复制' : isHtml ? '复制 HTML' : isMarkdown ? '复制 Markdown' : '复制当前代码'}</button>
         </footer>
       </div>
     </section> : <div className="empty-code"><Code2 size={28} /><h3>这个片段还没有代码块</h3><p>说明内容仍可阅读和复制。添加代码块后，这里会显示代码。</p></div>}

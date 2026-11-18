@@ -406,6 +406,11 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .code-window-bar:not(.is-floating) .code-expand:hover, .code-window-bar:not(.is-floating) .code-expand:focus-visible { color: #555; background: #e8e9ec; }
 
 .markdown-preview { --accent: #555; --accent-ink: #444; --accent-soft: #f3f3f3; --accent-border: #d1d1d1; --warm-surface: #f3f4f4; background: var(--preview-surface, #fafafa); flex: 1; min-height: 0; overflow: auto; padding: 24px 28px 36px; }
+.html-preview { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; background: #fff; }
+.html-preview iframe { display: block; flex: 1; min-height: 0; width: 100%; border: 0; background: #fff; }
+.html-preview-errors { flex: 0 0 auto; max-height: 110px; overflow: auto; padding: 8px 14px; background: #fef2f2; color: #b91c1c; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.html-preview-errors p { margin: 0; }
+.html-preview-loading { padding: 20px; color: var(--muted); font-size: 13px; }
 .markdown-preview-content { max-width: 860px; margin: 0 auto; color: #333; font-size: 15px; line-height: 1.75; }
 .markdown-preview-content h1 { color: #333; font-size: 30px; font-weight: 650; line-height: 1.3; margin: 24px 0 16px; padding: 0 30px 10px 0; border-bottom: 1px solid #eee; }
 .markdown-preview-content h2 { color: #333; font-size: 23px; font-weight: 600; line-height: 1.4; margin: 28px 0 14px; padding-bottom: 8px; border-bottom: 1px solid #eee; }
@@ -445,10 +450,34 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .preview-copy-check, .preview-copy.copied .preview-copy-icon { display: none; }
 .preview-copy.copied .preview-copy-check { display: block; }
 .preview-copy.copied { color: #15803d; }
+.html-code-dialog { position: static; inset: auto; width: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; color: inherit; background: var(--code-surface); font: inherit; }
+.html-block-header { flex-wrap: wrap; padding: 4px 8px 4px 14px; gap: 6px; }
+.html-block-preview-toggle { margin-left: 8px; }
+.html-block-header button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 26px; padding: 0 7px; border-radius: 4px; background: transparent; color: #71717a; font: 12px var(--font-ui); }
+.html-block-header button:hover { background: #e8e9ec; color: #444; }
+.html-block-header button:focus-visible { outline: 2px solid var(--orange-bright); outline-offset: 1px; }
+.html-block-header .html-block-preview-toggle[aria-pressed="true"] { background: #fff0e5; color: #c2410c; }
+.html-block-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.html-block-actions .preview-copy { position: static; width: 26px; padding: 0; }
+.html-block-actions .preview-copy.copied { color: #15803d; }
+.html-block-source { max-height: 480px; overflow: auto; }
+.markdown-preview-content .html-block-source pre { overflow: visible; }
+.html-block-preview { display: flex; min-height: 120px; max-height: 480px; background: #fff; }
+.html-block-source[hidden], .html-block-preview[hidden] { display: none; }
+.html-code-dialog.is-fullscreen { position: fixed; inset: 16px; display: flex; flex-direction: column; width: calc(100% - 32px); height: calc(100dvh - 32px); margin: 0; border: 1px solid #dedfe3; border-radius: 8px; overflow: hidden; visibility: visible; }
+.html-code-dialog.is-fullscreen::backdrop { background: #18181b66; }
+.html-code-dialog.is-fullscreen > .html-block-header { flex-shrink: 0; }
+.html-code-dialog.is-fullscreen > :is(.html-block-source, .html-block-preview) { flex: 1; min-height: 0; max-height: none; }
+@media (max-width: 700px) {
+  .html-block-header { padding-left: 8px; gap: 4px; }
+  .html-block-preview-toggle { margin-left: 0; }
+  .html-code-dialog.is-fullscreen { inset: 8px; width: calc(100% - 16px); height: calc(100dvh - 16px); }
+}
 @media (max-width: 700px) {
   .markdown-preview { padding: 20px 16px 28px; }
   .markdown-preview-content h1 { font-size: 24px; }
   .code-statusbar:has(.code-view-toggle) { gap: 6px; }
+  .code-statusbar:has([aria-label="重新运行 HTML"]) { flex-wrap: wrap; }
 }
 
 .inline-code-copy { display: contents; }

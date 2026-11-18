@@ -13,7 +13,7 @@ const aliases: Record<string, string> = {
   py: 'python', python3: 'python', js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'jsx',
   ts: 'typescript', tsx: 'tsx', shell: 'shell', sh: 'shell', bash: 'shell', shellscript: 'shell', zsh: 'shell',
   cpp: 'c++', cxx: 'c++', cc: 'c++', golang: 'go', rs: 'rust', rb: 'ruby', yml: 'yaml', md: 'markdown',
-  html5: 'html', css3: 'css', docker: 'dockerfile', gql: 'graphql', postgres: 'postgresql', pgsql: 'postgresql',
+  html5: 'html', htm: 'html', css3: 'css', docker: 'dockerfile', gql: 'graphql', postgres: 'postgresql', pgsql: 'postgresql',
   text: 'plain text', plaintext: 'plain text',
 };
 
@@ -69,6 +69,7 @@ const tomorrow = [
     // The marker plugin adds half a character to every guide's background position.
     // Cancel that offset so guides start at the left edge of each indent column.
     '.cm-indent-markers::before': { zIndex: '0', left: 'calc(2px - 0.5ch)' },
+    '&:not(.cm-focused)': { '--indent-marker-active-bg-color': 'var(--indent-marker-bg-color)' },
     '.cm-gutters': { backgroundColor: '#fff', color: '#8e908c', border: 'none' },
     '.cm-lineNumbers .cm-gutterElement': { minWidth: '3ch', padding: '0 8px 0 4px' },
     '.cm-foldGutter .cm-gutterElement': { padding: '0 3px', cursor: 'pointer' },
@@ -124,7 +125,7 @@ export function createEditor(parent: HTMLElement, code: string, editable: boolea
           // CSS draws the chevron, avoiding icon fonts and their loading races.
           return marker;
         } }),
-        indentationMarkers({ highlightActiveBlock: true, hideFirstIndent: false, thickness: 1, activeThickness: 1, colors: { light: '#b8b8b8', activeLight: '#999999' } }),
+        indentationMarkers({ highlightActiveBlock: true, hideFirstIndent: false, thickness: 1, activeThickness: 1, colors: { light: '#e8e8e8', activeLight: '#999999' } }),
         search({ top: true }), keymap.of([{ key: 'Mod-Shift-z', run: redo, preventDefault: true }, ...searchKeymap, ...foldKeymap, ...defaultKeymap, ...historyKeymap]),
         readonly.of(EditorState.readOnly.of(!editable)), language.of(indentationFolding),
         EditorView.editorAttributes.of(view => ({ 'data-has-selection': String(view.state.selection.ranges.some(range => !range.empty)) })),

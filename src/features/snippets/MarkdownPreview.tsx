@@ -3,6 +3,8 @@ import type { MarkdownPreviewData } from '../../core/types';
 import { copyText } from '../../services/clipboard';
 import type { CodeEditorHandle } from './CodeEditor';
 import { InlineCodeCopy } from './InlineCodeCopy';
+import { createPortal } from 'react-dom';
+import { HtmlCodeBlock } from './HtmlCodeBlock';
 
 interface Props { preview: MarkdownPreviewData; notify(message: string): void; ref?: Ref<CodeEditorHandle> }
 
@@ -10,6 +12,19 @@ export function MarkdownPreview({ preview, notify, ref }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const [copiedBlocks, setCopiedBlocks] = useState<Set<number>>(new Set());
+  const [htmlBlocks, setHtmlBlocks] = useState<{ host: HTMLElement; index: number; sourceHtml: string }[]>([]);
+  // Retain the generated, escaped Shiki markup when Strict Mode repeats setup.
+  // Portals let interactive blocks live inside arbitrary Markdown lists/quotes.
+  const sourceCache = useRef(new WeakMap<HTMLElement, string>());
+  useLayoutEffect(() => {
+    const hosts = viewportRef.current?.querySelectorAll<HTMLElement>('[data-preview-html]') ?? [];
+    setHtmlBlocks(Array.from(hosts, host => {
+      const cached = sourceCache.current.get(host);
+      const sourceHtml = cached ?? host.querySelector('.preview-code-body')?.innerHTML ?? '';
+      if (cached === undefined) { sourceCache.current.set(host, sourceHtml); host.replaceChildren(); }
+      return { host, index: Number(host.dataset.previewHtml), sourceHtml };
+    }));
+  }, [preview.html]);
   // Keep feedback in sync when React refreshes the generated preview HTML.
   useLayoutEffect(() => {
     viewportRef.current?.querySelectorAll<HTMLButtonElement>('button[data-preview-copy]').forEach(button => {
@@ -47,5 +62,9 @@ export function MarkdownPreview({ preview, notify, ref }: Props) {
     } catch { notify('复制失败，请手动选择并复制内容'); }
   }}>
     <InlineCodeCopy><div className="markdown markdown-preview-content" dangerouslySetInnerHTML={{ __html: preview.html }} /></InlineCodeCopy>
+    {htmlBlocks.map(({ host, index, sourceHtml }) => {
+      const block = preview.codeBlocks[index];
+      return block && createPortal(<HtmlCodeBlock index={index} code={block.code} language={block.language} sourceHtml={sourceHtml} />, host, String(index));
+    })}
   </div>;
 }

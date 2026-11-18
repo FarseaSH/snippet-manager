@@ -27,6 +27,7 @@ export default defineConfig({
       '@replit/codemirror-indentation-markers',
       'unified', 'remark-parse', 'remark-gfm', 'remark-rehype', 'rehype-sanitize', 'rehype-stringify',
       'shiki/core', 'shiki/engine/oniguruma', 'shiki/langs', 'shiki/wasm',
+      'es-module-lexer/js', 'postcss', 'postcss-value-parser',
     ],
     holdUntilCrawlEnd: false,
     rolldownOptions: {

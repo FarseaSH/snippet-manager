@@ -18,6 +18,19 @@ async function fixture(files: Record<string, string>) {
 }
 
 describe('Markdown 产品规则', () => {
+  it.each(['html', 'htm', 'HTML5'])('仅为 Markdown 内的 %s 围栏生成 HTML 预览挂载点，保留高亮源码与复制原文', async language => {
+    const source = '<button onclick="alert(1)">Hello</button>\n<script>window.example = 1;</script>';
+    const raw = '<script>window.outside = 1;</script>\n\n```' + language + '\n' + source + '\n```\n\n```js\nconsole.log(1)\n```';
+    const result = await parseSnippet(front + '````md\n' + raw + '\n````', 'html-in-markdown.md');
+    const preview = result.subSnippets[0].markdownPreview!;
+    expect(preview.html).toContain('data-preview-html="0"');
+    expect(preview.html.match(/data-preview-html=/g)).toHaveLength(1);
+    expect(preview.html).toContain('data-preview-copy="0"');
+    expect(preview.html).toContain('data-preview-copy="1"');
+    expect(preview.html).not.toContain('<script>');
+    expect(preview.html).not.toContain('<button onclick=');
+    expect(preview.codeBlocks[0]).toEqual({ code: source, language });
+  });
   it.each(['markdown', 'md', 'MD'])('为 %s 代码块生成安全预览，保留可复制代码原文', async language => {
     const code = '# Preview\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n- [x] Done\n\n> ```python\n> def hello():\n>     return "<safe>"\n> ```\n\n<script>alert(1)</script>\n\n[unsafe](javascript:alert(1))';
     const result = await parseSnippet(front + '````' + language + '\n' + code + '\n````', 'preview.md');

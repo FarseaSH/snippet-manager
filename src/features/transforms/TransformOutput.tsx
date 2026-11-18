@@ -49,7 +49,7 @@ export function TransformOutput({ result, fallbackLanguage, notify, focused, onT
   useEffect(() => {
     if (!focused) return;
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); toggleFocus(); }
+      if (event.key === 'Escape' && !document.querySelector('.html-code-dialog:modal')) { event.preventDefault(); toggleFocus(); }
     };
     window.addEventListener('keydown', escape, true);
     return () => window.removeEventListener('keydown', escape, true);

@@ -89,7 +89,10 @@ folders:
 
 ## 阅读与复制
 
+- HTML 代码块支持默认交互预览、源码切换、复制 HTML、重新运行和展开阅读。同组 Tab 使用文件名（如 `index.html`、`assets/style.css`、`assets/main.js`）及标准相对引用，支持 CSS `@import`、JS 模块与 CDN；各 HTML 页在切换 Tab 后保留状态，相关占位符变化约 500ms 后重跑。示例见 [HTML 多文件预览](docs/examples/html-preview.md)，完整规则见格式规范第 9 节。
+
 - Markdown（`markdown` / `md`）代码块默认显示渲染预览，支持标题、列表、任务清单、引用、表格、链接、图片，以及带行号和语言 Logo 的内嵌代码块。原始 HTML 按文本处理，链接经过安全过滤。
+- Markdown 预览内的 `html` / `htm` / `html5` 代码块默认显示独立预览，顶部“预览”按钮以淡橙色表示激活，点击关闭后显示代码，支持复制、重新运行和全屏。仅运行当前块的 HTML、内联样式与脚本，支持远程 CDN，不读取其它 Tab 或 snippet；转换输出的 Markdown 也适用。用例见 [Markdown 内嵌 HTML 预览](docs/examples/markdown-html-preview.md)，库内测试放在 `snippets/开发测试snippet/guides/markdown-html-preview.md`。
 - 预览使用浅灰色窗口外壳和红黄绿装饰圆点；底栏语言类型后的按钮切换预览与源码，两种模式分别保留阅读位置。源码恢复普通 Tomorrow 编辑器样式。
 - 预览内每个代码块右上角可单独复制，成功后显示绿色对勾；预览底栏的“复制 Markdown”复制当前代码块的完整 Markdown 原文。页面顶部同名按钮复制整个 snippet 源文件（含 Front Matter）。
 - 描述与 Markdown 预览中的行内代码支持 `⌘ / Ctrl + 左键` 复制；按住修饰键悬停时，文字显示为深橙色半粗体并使用小手指针，复制成功后在上方显示局部提示。

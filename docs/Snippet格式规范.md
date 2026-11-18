@@ -145,6 +145,18 @@ print(json.dumps({"ok": True}))
 
 需要预览 Markdown 本身时，外层使用四个反引号，内部代码块使用三个反引号，避免提前结束外层围栏。完整示例见 [Markdown 预览示例](examples/markdown-preview.md)。
 
+#### 内嵌 HTML 代码块
+
+Markdown 预览中的 `html`、`htm`、`html5` 围栏代码块默认执行并显示独立预览。顶部仅保留一个“预览”切换按钮：激活时呈淡橙色，点击关闭后显示代码，再次点击恢复预览。代码块可单独复制、全屏查看和重新运行；切回代码或切换全屏时保留交互状态，重新运行恢复初始状态。预览白底，高度随内容适配到 120–480px，超出后在内部滚动。全屏时使用可用窗口高度，按 Esc 退出并返回触发按钮。
+
+全屏按钮仅在预览模式显示，代码模式不提供全屏；在全屏中关闭预览，会同时退出全屏并显示源码。
+
+每个代码块都是独立页面，支持 HTML 片段、完整文档、块内 `<style>` 和 `<script>`，也支持完整远程 CDN 地址。不读取其它代码块、Tab 或 snippet 的资源；`./style.css` 等本地资源引用会提示不可用，请将内容内联或使用远程地址。预览复用 HTML 沙箱，样式和脚本与应用及其它块隔离，错误显示在当前预览内。Markdown 正文中直接书写的原始 HTML 仍按文字展示。
+
+以上行为同样适用于转换功能输出的 Markdown。内容发生变化后，新预览使用更新后的代码；原文、整份 Markdown 复制及各代码块复制均保持用户代码，不包含预览运行时。此功能只用于 Markdown 正文预览，描述框中的示例代码保持原有展示方式。
+
+完整测试用例见 [Markdown 内嵌 HTML 预览](examples/markdown-html-preview.md)，库内放在 `snippets/开发测试snippet/guides/markdown-html-preview.md`。
+
 ## 6. 只有一段代码，或只有说明
 
 只有一个顶层代码块时，页面不显示 Tab 栏；总说明仍在顶部，属于该子片段的说明独立显示在代码上方，没有子说明时不留空框。例如保存为 `snippets/python/hello.md`：
@@ -359,7 +371,60 @@ Markdown（包括 `md`）输出默认显示预览，沿用普通代码片段的�
 - 转换在浏览器本地隔离环境执行，支持离线使用；运行不能访问页面 DOM、站点存储和网络，不支持外部依赖或远程模块。每次运行最长 **2 秒**，超时终止以保持页面可操作。
 - 内容扫描、构建、搜索和仅浏览源码时，不执行转换函数。顶部“复制 Markdown”和 Raw 地址始终提供原始文件；代码 Tab 复制 JS 源码，转换 Tab 只复制输出字符串。
 
-## 9. 可选：目录排序与图标
+## 9. HTML 预览与同组文件
+
+普通代码 Snippet 中，`html`（也支持 `html5`、`htm`）代码块默认显示可交互预览。底栏可切换源代码、复制 HTML 和重新运行，右上角支持展开阅读，按 Esc 恢复。预览与源码切换、阅读其他 Tab 后返回时保留页面交互；多个 HTML Tab 各自保留状态，切换到其他 Snippet 后重置。
+
+将一级标题写成实际文件名，使用标准 HTML、CSS、JavaScript 引用同组文件，不需要专用协议或额外元数据：
+
+````markdown
+# index.html
+
+```html
+<!doctype html>
+<html lang="zh-CN">
+<head><link rel="stylesheet" href="./assets/style.css"></head>
+<body>
+  <button id="hello">点击试试</button>
+  <script type="module" src="./assets/main.js"></script>
+</body>
+</html>
+```
+
+# assets/style.css
+
+```css
+button { padding: 10px 20px; border-radius: 8px; }
+```
+
+# assets/main.js
+
+```js
+document.querySelector('#hello').onclick = () => {
+  document.querySelector('#hello').textContent = '你好';
+};
+```
+````
+
+把各 Tab 内容分别保存成同名文件后，可用普通静态服务器打开。预览仅在运行时组装资源，源码显示、复制 HTML、复制 CSS/JS、顶部复制 Markdown 和 Raw 文件不会包含预览生成的 Blob URL 或内部代码。
+
+引用规则：
+
+- 相对路径以**引用文件所在目录**为起点；`./`、`../`、根路径 `/`、查询参数、片段和中文文件名均支持，但不能越出当前片段组。文件名区分大小写，不允许同一路径匹配多个 Tab。
+- `<link rel="stylesheet">` 引用 `css` 代码块；`<script src>` 引用 `js`、`javascript`、`mjs` 或 `cjs` 代码块。代码块语言与文件扩展名分别承担类型与路径的作用，不自动把 TypeScript 编译为 JavaScript。
+- CSS 支持相对 `@import`、`url()`；例如 `assets/style.css` 中的 `./theme.css` 对应 `assets/theme.css`。同组 SVG 文本可作为图片资源。CSS 循环引用会提示错误。
+- 支持普通脚本、`async`、`defer`、`type="module"`、相对静态导入、再导出、循环模块，以及固定字符串形式的动态 `import('./utils.js')`。计算表达式形式的动态导入暂不支持；裸模块名可通过标准 HTML import map 的精确映射配置，暂不支持目录前缀或 `scopes`。
+- HTML 内的 `<style>`、`<script>` 正常执行。未被引用的 CSS、JS 不会自动注入当前页面。
+- `https://...` 和 `http://...` 地址交给浏览器加载，支持 CDN 脚本、样式、图片及浏览器允许的网络请求，遵守浏览器的 CORS 与 HTTPS 混合内容规则。应用不自动预缓存 CDN 资源，因此外部依赖需要网络；组内资源可随应用离线使用。
+- 本功能提供静态资源引用及模块导入，不提供后端服务、npm 解析、跨 Snippet 组引用、同组多页面路由或对 `fetch('./file.json')` 等运行时路径的虚拟文件系统拦截。
+
+HTML 和它引用的 CSS、JS 使用各 Tab 当前的占位符参数，未填写时沿用现有默认值与校验规则。相关内容变化后停止输入约 500ms 重新生成预览；与当前页面无关的 Tab 参数变化不会重置其交互。“重新运行”立即恢复页面初始状态。
+
+预览在隔离 iframe 中运行，自带样式不会影响应用，脚本不能直接读取应用 DOM 和本地存储。预览默认白底，不注入应用排版；页面的背景和排版由自己的 CSS 决定。文件缺失、重名、类型不符、路径越界及可收集的脚本或资源加载错误会显示在预览区域，仍可切换源码查看和复制。Markdown 中直接书写的原始 HTML 继续作为文字处理，HTML 围栏代码块可按前文规则独立预览；转换类型直接返回 HTML 时继续显示只读源码。
+
+完整示例见 [HTML 多文件预览](examples/html-preview.md)，包含 CSS 引用、模块、多个独立页面、占位符与 CDN。可复制到 `snippets/guides/html-preview.md` 进行验证。
+
+## 10. 可选：目录排序与图标
 
 创建真实目录即可产生分类，不必先登记。页面显示名称保留目录原始大小写、下划线和连字符，不自动将首字母或缩写大写。需要调整目录顺序或指定图标时，编辑 `snippets/_folders.yml`：
 
@@ -387,7 +452,7 @@ folders:
 
 Snippet 列表按 `snippet_name` 排序，同名时按路径排序。浏览父目录时，列表同时包含直属和所有子目录下的 Snippet。
 
-## 10. 保存与检查
+## 11. 保存与检查
 
 开发时执行 `npm run dev`，添加、修改或删除 `snippets/` 中的文件会自动更新页面，不需要先构建数据。发布时执行 `npm run build`，生成一次静态内容。
 

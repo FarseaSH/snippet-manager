@@ -1,0 +1,174 @@
+import { test, expect } from '@playwright/test';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { createServer } from 'node:http';
+
+const name = `__markdown-html-${process.pid}`;
+const file = path.resolve(process.env.SNIPPETS_DIR || 'snippets', `${name}.md`);
+const route = `snippet/${name}`;
+const front = '---\nsnippet_name: Markdown HTML Test\nsnippet_tags: [test]\n---\n\n';
+const markdownSnippet = (code: string) => front + '````md\n' + code + '\n````';
+test.beforeEach(async ({ context }) => {
+  test.skip(process.env.APP_TEST_MODE === 'production', '使用临时 Markdown 测试内容');
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await fs.copyFile('docs/examples/markdown-html-preview.md', file);
+});
+test.afterEach(async () => { await fs.rm(file, { force: true }); });
+
+test('HTML 块默认预览、单按钮橙色激活切换，样式隔离、交互保留、重跑和复制原文', async ({ page, request }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const raw = await fs.readFile(file, 'utf8');
+  await page.goto(route);
+  const blocks = page.locator('[data-preview-html]');
+  await expect(blocks).toHaveCount(3);
+  await expect(blocks.first().locator('pre')).toBeHidden();
+  await expect(page.locator('.html-block-preview iframe')).toHaveCount(3);
+  await expect(blocks.getByRole('button', { name: '代码', exact: true })).toHaveCount(0);
+  await expect(page.locator('.markdown-preview-content')).toContainText('<strong>不会自动渲染为加粗内容</strong>');
+  const first = blocks.nth(0);
+  const second = blocks.nth(1);
+  const toggle = first.getByRole('button', { name: '预览', exact: true });
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(toggle).toHaveCSS('background-color', 'rgb(255, 240, 229)');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(first.locator('pre')).toBeVisible();
+  await expect(first.locator('pre')).toContainText('<article class="card">');
+  await toggle.click();
+  const card = page.frameLocator('iframe[title="代码块 1 HTML 预览"]');
+  await expect(card.locator('.card')).toHaveCSS('background-color', 'rgb(255, 247, 237)');
+  const frame = page.frameLocator('iframe[title="代码块 2 HTML 预览"]');
+  const counter = frame.locator('#counter');
+  await counter.click();
+  await expect(counter).toHaveText('点击次数：1');
+  await second.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(second.getByRole('button', { name: '预览', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(second.locator('pre')).toBeVisible();
+  await expect(second.locator('pre')).toContainText('let count = 0');
+  await second.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(counter).toHaveText('点击次数：1');
+  await page.getByRole('button', { name: '查看源代码', exact: true }).click();
+  await page.getByRole('button', { name: '切换到预览', exact: true }).click();
+  await expect(counter).toHaveText('点击次数：1');
+  await second.getByRole('button', { name: '复制代码块 2', exact: true }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain('let count = 0');
+  expect(copied).not.toContain('snippet-html');
+  await expect(second.locator('.preview-copy')).toHaveClass(/copied/);
+  await second.getByRole('button', { name: '重新运行代码块 2', exact: true }).click();
+  await expect(counter).toHaveText('点击次数：0');
+  expect(await (await request.get(`raw/${name}.md`)).text()).toBe(raw);
+  expect(errors).toEqual([]);
+});
+
+test('仅预览支持全屏，切回代码退出全屏，iframe 保留状态且 Esc 只退出最内层', async ({ page }) => {
+  await page.goto(route);
+  await page.getByRole('button', { name: '展开代码', exact: true }).click();
+  const block = page.locator('[data-preview-html="1"]');
+  await block.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(block.getByRole('button', { name: '全屏代码块 2', exact: true })).toHaveCount(0);
+  await block.getByRole('button', { name: '预览', exact: true }).click();
+  await block.getByRole('button', { name: '全屏代码块 2', exact: true }).click();
+  const modal = page.getByRole('dialog', { name: 'HTML 代码块 2', exact: true });
+  await expect(modal).toBeVisible();
+  await expect(modal.locator('.html-block-preview')).toBeVisible();
+  await modal.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(page.locator('.html-code-dialog:modal')).toHaveCount(0);
+  await expect(block.locator('pre')).toBeVisible();
+  await expect(block.getByRole('button', { name: '全屏代码块 2', exact: true })).toHaveCount(0);
+  await expect(block.getByRole('button', { name: '预览', exact: true })).toBeFocused();
+  await expect(page.locator('.code-focused')).toHaveCount(1);
+  await block.getByRole('button', { name: '预览', exact: true }).click();
+  const counter = page.frameLocator('iframe[title="代码块 2 HTML 预览"]').locator('#counter');
+  await counter.click();
+  await block.getByRole('button', { name: '全屏代码块 2', exact: true }).click();
+  await expect(counter).toHaveText('点击次数：1');
+  await counter.focus();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.html-code-dialog:modal')).toHaveCount(0);
+  await expect(block.getByRole('button', { name: '全屏代码块 2', exact: true })).toBeFocused();
+  await expect(counter).toHaveText('点击次数：1');
+  await expect(page.locator('.code-focused')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.code-focused')).toHaveCount(0);
+});
+
+test('完整文档高度自动适配和收缩，手机布局与全屏可用', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto(route);
+  await expect(page.getByRole('dialog', { name: '片段详情', exact: true })).toHaveCSS('transform', 'none');
+  const block = page.locator('[data-preview-html="2"]');
+  const frame = page.frameLocator('iframe[title="代码块 3 HTML 预览"]');
+  await expect(frame.getByRole('heading')).toHaveText('完整 HTML 文档');
+  const viewport = block.locator('.html-block-preview');
+  await expect.poll(async () => (await viewport.boundingBox())!.height).toBeLessThan(300);
+  await frame.getByRole('button').click();
+  await expect(viewport).toHaveCSS('height', '480px');
+  await frame.getByRole('button').click();
+  await expect.poll(async () => (await viewport.boundingBox())!.height).toBeLessThan(300);
+  await block.getByRole('button', { name: '全屏代码块 3', exact: true }).click();
+  await expect(page.getByRole('button', { name: '退出代码块 3 全屏' })).toBeInViewport();
+  await expect.poll(async () => (await viewport.boundingBox())!.height).toBeGreaterThan(700);
+  await page.screenshot({ path: 'test-results/markdown-html-mobile-fullscreen.png' });
+  await page.getByRole('button', { name: '退出代码块 3 全屏' }).click();
+  await expect(page.getByRole('dialog', { name: '片段详情', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('本地资源不会读取其它块或 Tab，错误时仍可复制和查看源码', async ({ page }) => {
+  await page.goto(route);
+  await page.getByRole('tab', { name: '本地引用边界', exact: true }).click();
+  const block = page.locator('[data-preview-html="0"]');
+  await expect(block.getByRole('alert')).toContainText('独立 HTML 代码块仅支持内联内容或远程资源');
+  await block.getByRole('button', { name: '复制代码块 1', exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('href="./style.css"');
+  await block.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(block.locator('pre')).toBeVisible();
+  await expect(block.locator('pre')).toContainText('href="./style.css"');
+});
+
+test('支持远程资源与脚本错误，沙箱隔离父页面并拒绝伪造消息', async ({ page }) => {
+  const server = createServer((_request, response) => { response.setHeader('Access-Control-Allow-Origin', '*'); response.setHeader('Content-Type', 'text/javascript'); response.end('document.querySelector("#remote").textContent = "CDN ready";'); });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const code = `<p id="remote"></p><p id="sandbox"></p><script src="http://127.0.0.1:${port}/cdn.js"></script><script>let blocked = 0; try {parent.document.body} catch {blocked++} try {localStorage.getItem('x')} catch {blocked++} document.querySelector('#sandbox').textContent = blocked; setTimeout(() => {throw Error('块内异常')}, 10)</script>`;
+    await fs.writeFile(file, markdownSnippet('```html\n' + code + '\n```'));
+    await page.goto(route);
+    const block = page.locator('[data-preview-html="0"]');
+    const frame = page.frameLocator('iframe[title="代码块 1 HTML 预览"]');
+    await expect(frame.locator('#remote')).toHaveText('CDN ready');
+    await expect(frame.locator('#sandbox')).toHaveText('2');
+    await expect(block.getByRole('alert')).toContainText('块内异常');
+    await page.evaluate(() => window.postMessage({ channel: 'snippet-html', type: 'height', height: 99999, token: 'spoof' }, '*'));
+    await expect(block.locator('.html-block-preview')).not.toHaveCSS('height', '99999px');
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test('转换输出 Markdown 同样支持 HTML 块，更新后渲染新内容', async ({ page }) => {
+  const source = '# Report\n\n```html\n<button id="test" onclick="this.textContent=\'clicked\'">old</button>\n```';
+  await fs.writeFile(file, '---\nsnippet_name: Markdown HTML Transform\nsnippet_tags: []\nsnippet_type: transform\ntransform:\n  output_language: markdown\n---\n\n```js\nexport default function transform(input) { return { ok: true, output: input }; }\n```');
+  await page.goto(route);
+  const input = page.getByRole('textbox', { name: '转换输入', exact: true });
+  await input.fill(source);
+  const block = page.locator('[data-preview-html="0"]');
+  const frame = page.frameLocator('iframe[title="代码块 1 HTML 预览"]');
+  await expect(frame.locator('#test')).toHaveText('old');
+  await frame.locator('#test').click();
+  await page.getByRole('button', { name: '全屏输出', exact: true }).click();
+  await block.getByRole('button', { name: '全屏代码块 1', exact: true }).click();
+  await frame.locator('#test').focus();
+  await page.keyboard.press('Escape');
+  await expect(frame.locator('#test')).toHaveText('clicked');
+  await expect(page.locator('.output-focused')).toHaveCount(1);
+  await page.getByRole('button', { name: '恢复正文', exact: true }).click();
+  await input.fill(source.replace('old', 'new'));
+  await expect(block.getByRole('button', { name: '预览', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(frame.locator('#test')).toHaveText('new');
+  await block.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(block.locator('pre')).toContainText('new');
+  await block.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(frame.locator('#test')).toHaveText('new');
+});

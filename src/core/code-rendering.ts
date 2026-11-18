@@ -82,7 +82,7 @@ export async function renderMarkdownNodes(nodes: RootContent[], resolve: Resolve
           const highlighted = await codeToHast(block.code, highlightOptions(block.language));
           const icon = getLanguageIcon(block.language);
           parent.children[childIndex] = {
-            type: 'element', tagName: 'div', properties: { className: ['preview-code-block'] },
+            type: 'element', tagName: 'div', properties: { className: ['preview-code-block'], ...(['html', 'htm', 'html5'].includes(block.language.trim().toLowerCase()) ? { dataPreviewHtml: String(blockIndex) } : {}) },
             children: [
               { type: 'element', tagName: 'div', properties: { className: ['preview-code-header'] }, children: [
                 { type: 'element', tagName: 'svg', properties: {
@@ -121,7 +121,7 @@ export async function renderMarkdownNodes(nodes: RootContent[], resolve: Resolve
 }
 
 function highlightOptions(language: string) {
-  const aliases: Record<string, string> = { shell: 'bash', sh: 'bash', js: 'javascript', ts: 'typescript', py: 'python', yml: 'yaml', md: 'markdown' };
+  const aliases: Record<string, string> = { shell: 'bash', sh: 'bash', js: 'javascript', ts: 'typescript', py: 'python', yml: 'yaml', md: 'markdown', html5: 'html', htm: 'html' };
   const lang = aliases[language.trim().toLowerCase()] ?? language.trim().toLowerCase();
   return { lang: Object.hasOwn(bundledLanguages, lang) ? lang as keyof typeof bundledLanguages : 'text', theme: highlightTheme };
 }
