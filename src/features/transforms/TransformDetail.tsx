@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeftRight, Check, Code2, Copy, Maximize2, Minimize2, Zap } from 'snippet-manager/icons/ui';
 import type { Snippet, SubSnippet } from '../../core/types';
+import { languageName } from '../../core/language-name';
 import { copyText } from '../../services/clipboard';
 import { CodeEditor } from '../snippets/CodeEditor';
 import { LanguageIcon } from '../snippets/LanguageIcon';
@@ -50,7 +51,8 @@ export function TransformDetail({ snippet, initialTab, showTitle, notify }: Prop
     try {
       await copyText(value); notify(key === 'output' ? '转换结果已复制' : '代码已复制');
       clearTimeout(copyTimer.current); setCopied(key); copyTimer.current = setTimeout(() => setCopied(''), 1800);
-    } catch { notify('复制失败，请手动选择并复制内容'); }
+      return true;
+    } catch { notify('复制失败，请手动选择并复制内容'); return false; }
   }
   return <div className={`snippet-detail-layout${focused === 'output' ? ' output-focused' : focused === 'source' ? ' code-focused' : ''}`}>
     <div className="snippet-detail-scroll">
@@ -88,8 +90,11 @@ export function TransformDetail({ snippet, initialTab, showTitle, notify }: Prop
           <div id="panel-transform-code" className="transform-source-panel" role="tabpanel" aria-labelledby="tab-transform-code" hidden={active !== 'transform-code'}>
             <div className="code-card">
               <button ref={expandRef} type="button" className="icon-button code-expand" aria-label={focused === 'source' ? '恢复正文' : '展开代码'} onClick={() => setFocused(value => value === 'source' ? undefined : 'source')}>{focused === 'source' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
-              {visitedCode && <CodeEditor snippet={source} />}
-              <footer className="code-statusbar"><span className="language"><LanguageIcon language="javascript" size={16} />javascript</span><button type="button" className="copy-code" onClick={() => void copy(source.code, 'code')}>{copied === 'code' ? <Check size={16} /> : <Copy size={16} />}{copied === 'code' ? '已复制' : '复制当前代码'}</button></footer>
+              {visitedCode && <CodeEditor snippet={source} copyEnabled={active === 'transform-code'} onCopy={() => copy(source.code, 'code')} />}
+              <footer className="code-statusbar">
+                <button type="button" className="copy-code" onClick={() => void copy(source.code, 'code')}>{copied === 'code' ? <Check size={16} /> : <Copy size={16} />}{copied === 'code' ? '已复制' : '复制当前代码'}</button>
+                <div className="code-statusbar-controls"><span className="language"><LanguageIcon language={source.language} size={16} />{languageName(source.language)}</span></div>
+              </footer>
             </div>
           </div>
         </section>

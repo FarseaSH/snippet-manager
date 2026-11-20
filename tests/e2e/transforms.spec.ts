@@ -169,12 +169,12 @@ test('动态语言覆盖默认配置，别名可用，重新进入 Markdown 时�
   await expect(page.locator('.transform-status-row [role="status"]')).toHaveText('转换成功');
   await expect(output.getByRole('button', { name: '切换到预览' })).toBeVisible();
   await input(page, 'json\n{"fresh":true}');
-  await expect(language).toHaveText('json');
+  await expect(language).toHaveText('JSON');
   await expect(output.getByRole('button', { name: '切换到预览' })).toHaveCount(0);
   await output.getByRole('button', { name: '复制结果' }).click();
   expect(await clipboard(page)).toBe('{"fresh":true}');
   await input(page, 'py\nprint("hello")');
-  await expect(language).toHaveText('python');
+  await expect(language).toHaveText('Python');
   await input(page, 'custom\nplain output');
   await expect(language).toHaveText('custom');
   await input(page, '\nusing fallback');
@@ -188,8 +188,8 @@ test('动态语言覆盖默认配置，别名可用，重新进入 Markdown 时�
 
 test('返回 JSON 与 Python 示例可运行，配置 Markdown 兼容旧函数和空输出', async ({ page }) => {
   for (const [example, language, expected] of [
-    ['transform-output-json', 'json', '"enabled": true'],
-    ['transform-json-to-python', 'python', '"missing": None'],
+    ['transform-output-json', 'JSON', '"enabled": true'],
+    ['transform-json-to-python', 'Python', '"missing": None'],
   ]) {
     await fs.copyFile(`docs/examples/${example}.md`, file);
     await page.goto(route);
@@ -241,7 +241,7 @@ test('输出代码和 Markdown 可全屏，按钮与 Esc 恢复并保留结果�
     await expect(output.getByRole('button', { name: '切换到预览' })).toBeVisible();
     await expect(output).toHaveCSS('position', 'relative');
     await input(page, 'json\n{"fullscreen":true}');
-    await expect(output.locator('.language')).toHaveText('json');
+    await expect(output.locator('.language')).toHaveText('JSON');
     await output.getByRole('button', { name: '全屏输出' }).click();
     await output.getByRole('button', { name: '复制结果' }).click();
     expect(await clipboard(page)).toBe('{"fullscreen":true}');

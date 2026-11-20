@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check, Code2, Copy, Eye, Maximize2, Minimize2, RotateCcw } from 'snippet-manager/icons/ui';
 import type { Snippet } from '../../core/types';
+import { languageName } from '../../core/language-name';
 import { copyText } from '../../services/clipboard';
 import { SnippetDescription } from './SnippetDescription';
 import { LanguageIcon } from './LanguageIcon';
@@ -113,7 +114,8 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
     try {
       await copyText(value); notify(message);
       if (code) { setCopied(true); clearTimeout(copyTimer.current); copyTimer.current = setTimeout(() => setCopied(false), 1800); }
-    } catch { notify('复制失败，请手动选择并复制内容'); }
+      return true;
+    } catch { notify('复制失败，请手动选择并复制内容'); return false; }
   }
   function selectTab(id: string) {
     if (!snippet.subSnippets.some(part => part.id === id)) return;
@@ -152,7 +154,7 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
         </div>
         <div className="code-views">
           <div className={`code-view ${isPreviewable && !showSource ? 'is-inactive' : ''}`}>
-            <CodeEditor ref={editorRef} key={`${snippet.path}:${sub.id}`} snippet={displaySub!} />
+            <CodeEditor ref={editorRef} key={`${snippet.path}:${sub.id}`} snippet={displaySub!} copyEnabled={!isPreview} onCopy={() => copy(code, '代码已复制', true)} />
           </div>
           {isMarkdown && <div className={`code-view ${showSource ? 'is-inactive' : ''}`}>
             {displaySub?.markdownPreview ? <MarkdownPreview ref={previewRef} key={`${snippet.path}:${sub.id}`} preview={displaySub.markdownPreview} notify={notify} /> : <div className="markdown-preview" role="status">{renderError ? '预览暂不可用，请查看源代码。' : '正在更新预览…'}</div>}
@@ -162,12 +164,14 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
           </div>)}
         </div>
         <footer className="code-statusbar" aria-label="当前代码状态栏">
-          <span className="language"><LanguageIcon language={sub.language} size={16} />{isHtml ? 'HTML' : isMarkdown ? 'Markdown' : sub.language === 'text' ? 'Plain Text' : sub.language}</span>
-          {isPreviewable && <button type="button" className="code-view-toggle" aria-label={showSource ? '切换到预览' : '查看源代码'} onClick={toggleSource}>
-            {showSource ? <Eye size={16} /> : <Code2 size={16} />}{showSource ? '预览' : '源代码'}
-          </button>}
-          {isHtml && <button type="button" className="code-view-toggle" aria-label="重新运行 HTML" onClick={() => htmlPreviewRef.current?.rerun()}><RotateCcw size={15} />重新运行</button>}
           <button className={`copy-code ${copied ? 'copied' : ''}`} onClick={() => void copy(code, '代码已复制', true)}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? '已复制' : isHtml ? '复制 HTML' : isMarkdown ? '复制 Markdown' : '复制当前代码'}</button>
+          <div className="code-statusbar-controls">
+            {isHtml && <button type="button" className="code-view-toggle" aria-label="重新运行 HTML" onClick={() => htmlPreviewRef.current?.rerun()}><RotateCcw size={15} />重新运行</button>}
+            {isPreviewable && <button type="button" className="code-view-toggle" aria-label={showSource ? '切换到预览' : '查看源代码'} onClick={toggleSource}>
+              {showSource ? <Eye size={16} /> : <Code2 size={16} />}{showSource ? '预览' : '源代码'}
+            </button>}
+            <span className="language"><LanguageIcon language={sub.language} size={16} />{languageName(sub.language)}</span>
+          </div>
         </footer>
       </div>
     </section> : <div className="empty-code"><Code2 size={28} /><h3>这个片段还没有代码块</h3><p>说明内容仍可阅读和复制。添加代码块后，这里会显示代码。</p></div>}

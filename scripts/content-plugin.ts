@@ -6,7 +6,7 @@ import { readLibrary, type ContentBuild } from './content/library.ts';
 import { folderPath, pagePath, SETTINGS_PATH } from '../src/core/paths.ts';
 
 const mime = (name: string) => ({ '.json': 'application/json; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.pdf': 'application/pdf' }[path.extname(name)] ?? 'application/octet-stream');
-const manifest = (base: string) => JSON.stringify({ id: base, name: 'Snippet Manager', short_name: 'Snippets', description: '查找、阅读、复制你的代码片段，支持离线使用。', lang: 'zh-CN', start_url: base, scope: base, display: 'standalone', theme_color: '#27272a', background_color: '#ffffff', icons: [{ src: `${base}icons/icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: `${base}icons/icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: `${base}icons/icon-maskable.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' }] }, null, 2);
+const manifest = (base: string) => JSON.stringify({ id: base, name: 'Snippet Manager', short_name: 'Snippets', description: '查找、阅读、复制你的代码片段，支持离线使用。', lang: 'zh-CN', start_url: base, scope: base, display: 'standalone', theme_color: '#f1f3f5', background_color: '#ffffff', icons: [{ src: `${base}icons/icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: `${base}icons/icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: `${base}icons/icon-maskable.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' }] }, null, 2);
 
 export function contentPlugin(): Plugin {
   let config: ResolvedConfig;

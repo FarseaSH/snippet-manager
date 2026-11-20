@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check, Code2, Copy, Eye, Maximize2, Minimize2 } from 'snippet-manager/icons/ui';
 import type { SubSnippet } from '../../core/types';
+import { languageName } from '../../core/language-name';
 import { resolveTransformLanguage } from '../../core/transform';
 import { copyText } from '../../services/clipboard';
 import { CodeEditor, type CodeEditorHandle } from '../snippets/CodeEditor';
@@ -58,7 +59,8 @@ export function TransformOutput({ result, fallbackLanguage, notify, focused, onT
     try {
       await copyText(output); notify('转换结果已复制');
       clearTimeout(copyTimer.current); setCopied(true); copyTimer.current = setTimeout(() => setCopied(false), 1800);
-    } catch { notify('复制失败，请手动选择并复制内容'); }
+      return true;
+    } catch { notify('复制失败，请手动选择并复制内容'); return false; }
   }
   return <section className="transform-editor" aria-label="输出区">
     <div className="transform-editor-heading"><span>输出</span></div>
@@ -72,7 +74,7 @@ export function TransformOutput({ result, fallbackLanguage, notify, focused, onT
       </div>
       <div className="code-views">
         <div className={`code-view${isPreview ? ' is-inactive' : ''}`}>
-          <CodeEditor ref={editorRef} snippet={snippet!} ariaLabel="转换输出" />
+          <CodeEditor ref={editorRef} snippet={snippet!} ariaLabel="转换输出" copyEnabled={result.status === 'success' && !isPreview} onCopy={copy} />
         </div>
         {isMarkdown && <div className={`code-view${isPreview ? '' : ' is-inactive'}`}>
           {result.status === 'success' && (snippet?.markdownPreview
@@ -82,9 +84,11 @@ export function TransformOutput({ result, fallbackLanguage, notify, focused, onT
         {result.status !== 'success' && <span className="transform-placeholder" aria-hidden="true">{result.status === 'running' ? '正在转换…' : '转换结果将显示在这里'}</span>}
       </div>
       <footer className="code-statusbar" aria-label="转换输出状态栏">
-        <span className="language"><LanguageIcon language={language} size={16} /><span>{isMarkdown ? 'Markdown' : language === 'text' ? 'Plain Text' : language}</span></span>
-        {isMarkdown && <button type="button" className="code-view-toggle" aria-label={isPreview ? '查看源代码' : '切换到预览'} onClick={() => setShowSource(!showSource)}>{isPreview ? <Code2 size={16} /> : <Eye size={16} />}{isPreview ? '源代码' : '预览'}</button>}
         <button type="button" className={`copy-code${copied ? ' copied' : ''}`} disabled={result.status !== 'success'} onClick={() => void copy()}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? '已复制' : isMarkdown ? '复制 Markdown' : '复制结果'}</button>
+        <div className="code-statusbar-controls">
+          {isMarkdown && <button type="button" className="code-view-toggle" aria-label={isPreview ? '查看源代码' : '切换到预览'} onClick={() => setShowSource(!showSource)}>{isPreview ? <Code2 size={16} /> : <Eye size={16} />}{isPreview ? '源代码' : '预览'}</button>}
+          <span className="language"><LanguageIcon language={language} size={16} /><span>{languageName(language)}</span></span>
+        </div>
       </footer>
     </div>
     {error && result.status === 'success' && <p className="placeholder-render-error" role="alert">{error}</p>}
