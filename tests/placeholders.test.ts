@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDateValue, parsePlaceholders, replacePlaceholders, validatePlaceholderValue } from '../src/core/placeholders';
+import { formatDateValue, parsePlaceholders, placeholderHelp, replacePlaceholders, validatePlaceholderValue } from '../src/core/placeholders';
 import { parseSnippet } from '../scripts/content/parse';
 import { renderMarkdownPreview } from '../src/core/code-rendering';
 import type { Diagnostic } from '../src/core/types';
@@ -7,6 +7,47 @@ import type { Diagnostic } from '../src/core/types';
 const render = (code: string, values: Record<string, string> = {}) => replacePlaceholders(code, parsePlaceholders(code), values);
 
 describe('占位符语法与替换', () => {
+  it('填写提示位于类型、正则和日期格式之后，兼容省略类型及旧默认值', () => {
+    const code = '@name:text/^[a-z]+$/[填写用户名 e.g. alice]:demo@ @host:[服务器地址]:https://example.com:8080@ @day:date(YYYY-MM-DD[T]HH:mm)[开始时间]:2026-11-10T14:30@';
+    const template = parsePlaceholders(code);
+    expect(template.issues).toEqual([]);
+    expect(template.fields.map(field => field.hint)).toEqual(['填写用户名 e.g. alice', '服务器地址', '开始时间']);
+    expect(replacePlaceholders(code, template)).toBe('demo https://example.com:8080 2026-11-10T14:30');
+    expect(render('@x:text[没有默认值]@')).toBe('@x:text[没有默认值]@');
+    expect(render('@x:text:[旧默认值]@')).toBe('[旧默认值]');
+  });
+  it('提示中的转义字符和示例按纯文本解析，仅去掉示例两端空白', () => {
+    const template = parsePlaceholders(String.raw`@x:text[路径 e.g.  C:\\temp\\a\]user\@site  ]:value@`);
+    expect(template.issues).toEqual([]);
+    expect(placeholderHelp(template.fields[0].hint)).toEqual({ description: '路径', example: 'C:\\temp\\a]user@site' });
+    expect(placeholderHelp(' 提示 e.g.  a  b\nc  ')).toEqual({ description: '提示', example: 'a  b\nc' });
+    expect(placeholderHelp('E.G. value e.g. another')).toEqual({ description: '', example: 'value e.g. another' });
+    expect(placeholderHelp(' 提示 e.g.  ')).toEqual({ description: '提示 e.g.' });
+    expect(placeholderHelp()).toEqual({ description: '' });
+  });
+  it('同名提示采用第一个非空提示，提示冲突仅警告，不阻止替换', () => {
+    const code = '@x@ @x:text[第一个 e.g. example]:default@ @x:text[第二个]@';
+    const template = parsePlaceholders(code);
+    expect(template.fields[0].hint).toBe('第一个 e.g. example');
+    expect(template.fields[0].issue).toBeUndefined();
+    expect(template.issues).toEqual(['同名变量“x”的填写提示不一致，已采用第一个非空提示']);
+    expect(replacePlaceholders(code, template)).toBe('default default default');
+    expect(render(code, { x: 'input' })).toBe('input input input');
+  });
+  it('缺少提示结束符保留原文并诊断，不吞掉后续合法占位符', () => {
+    const code = '@bad:text[missing@ @good:text[正确]:yes@';
+    const template = parsePlaceholders(code);
+    expect(template.issues).toHaveLength(1);
+    expect(template.issues[0]).toContain('填写提示缺少结束 ]');
+    expect(replacePlaceholders(code, template)).toBe('@bad:text[missing@ yes');
+  });
+  it('空输入回退到默认值，空格仍是实际输入，文本空默认值与无默认值保持原有替换', () => {
+    expect(render('@name::demo@ @port:number:8080@ @day:date:2026-11-10@', { name: '', port: '', day: '' })).toBe('demo 8080 2026-11-10');
+    expect(render('@name::demo@', { name: ' ' })).toBe(' ');
+    expect(render('@name:text:@')).toBe('');
+    expect(render('@name@', { name: '' })).toBe('');
+    expect(render('@port:number:bad@', { port: '' })).toBe('@port:number:bad@');
+  });
   it('支持省略类型、默认值以及中文名称，并保留未填写的占位符', () => {
     expect(render('@host@ @host:text@ @名称::demo@ @port:number:8080@')).toBe('@host@ @host:text@ demo 8080');
     expect(render('@name@ @name@', { name: '' })).toBe(' ');

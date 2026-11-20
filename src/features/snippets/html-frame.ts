@@ -25,7 +25,13 @@ function bridge(token: string, autoSize: boolean) {
       scrollTo(Number(event.data.x) || 0, Number(event.data.y) || 0);
     }
   });
-  addEventListener('keydown', event => { if (event.key === 'Escape') send('escape'); }, true);
+  addEventListener('keydown', event => {
+    if (!event.isComposing && !event.altKey && (event.ctrlKey || event.metaKey) && event.shiftKey && (event.code === 'KeyF' || event.key.toLowerCase() === 'f')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!event.repeat) send('toggle-fullscreen');
+    } else if (event.key === 'Escape') send('escape');
+  }, true);
   addEventListener('click', event => {
     const anchor = event.target instanceof Element ? event.target.closest('a') : null;
     const href = anchor?.getAttribute('href');

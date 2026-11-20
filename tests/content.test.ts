@@ -69,6 +69,7 @@ describe('Markdown 产品规则', () => {
     const raw = front + '主说明。\n\n# First\n\n简短说明。\n\n```text\none\n```\n\n# Second\n\n- 原有列表项\n\n```text\ntwo\n```';
     const result = await parseSnippet(raw, 'summary.md');
     expect(result.descriptionHtml).toBe('<p>主说明。</p>');
+    expect(result.summary).toBe('主说明。');
     expect(result.subSnippets[0].descriptionHtml).toBe('<p>简短说明。</p>');
     expect(result.subSnippets[1].descriptionHtml).toContain('<li>原有列表项</li>');
     expect(result.raw).toBe(raw);
@@ -86,6 +87,9 @@ describe('Markdown 产品规则', () => {
     expect(result.subSnippets[0].title).toBe('SSH');
     expect(result.subSnippets[0].sourceDescription).toContain('登录之后');
     expect(result.descriptionHtml).toBe('');
+    expect(result.summary).toBe('');
+    expect(result.descriptionText).toContain('SSH');
+    expect(result.descriptionText).toContain('登录之前');
     expect(result.subSnippets[0].descriptionHtml).toContain('登录之前');
     expect(result.subSnippets[0].descriptionHtml).toContain('登录之后');
   });
@@ -112,6 +116,7 @@ describe('Markdown 产品规则', () => {
     expect(result.subSnippets).toEqual([]);
     expect(result.descriptionHtml).toContain('<h1>说明</h1>');
     expect(result.descriptionHtml).toContain('第二部分');
+    expect(result.summary).toBe('说明 只有说明。 更多 第二部分。');
     expect(diagnostics).toEqual([]);
   });
   it('嵌套和缩进代码保留在说明内，不占用 Tab 或标题关联', async () => {

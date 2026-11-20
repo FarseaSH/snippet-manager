@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Eye, Maximize2, Minimize2, RotateCcw } from 'snippet-manager/icons/ui';
 import { LanguageIcon } from './LanguageIcon';
 import { HtmlPreview, type HtmlPreviewHandle } from './HtmlPreview';
+import { useFullscreenShortcut } from './useFullscreenShortcut';
 
 const noFiles: [] = [];
 interface Props { index: number; code: string; language: string; sourceHtml: string }
@@ -23,6 +24,12 @@ export function HtmlCodeBlock({ index, code, language, sourceHtml }: Props) {
     setFullscreen(false);
     expandButton.current?.focus({ preventScroll: true });
   }
+  function toggleFullscreen() {
+    if (!preview || !dialog.current || getComputedStyle(dialog.current).visibility !== 'visible') return;
+    if (fullscreen) restore();
+    else { dialog.current.close(); dialog.current.showModal(); setFullscreen(true); }
+  }
+  useFullscreenShortcut(toggleFullscreen, { enabled: preview, scope: dialog });
   useEffect(() => {
     if (!fullscreen) return;
     // Escape in the host document closes this dialog before an outer expanded editor.
@@ -44,16 +51,13 @@ export function HtmlCodeBlock({ index, code, language, sourceHtml }: Props) {
       }}><Eye size={13} />预览</button>
       <div className="html-block-actions">
         {preview && <button type="button" title="重新运行" aria-label={`重新运行代码块 ${index + 1}`} onClick={() => runtime.current?.rerun()}><RotateCcw size={14} /></button>}
-        {preview && <button ref={expandButton} type="button" title={fullscreen ? '退出全屏（Esc）' : '全屏'} aria-label={fullscreen ? `退出代码块 ${index + 1} 全屏` : `全屏代码块 ${index + 1}`} aria-pressed={fullscreen} onClick={() => {
-          if (fullscreen) restore();
-          else if (dialog.current) { dialog.current.close(); dialog.current.showModal(); setFullscreen(true); }
-        }}>{fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>}
+        {preview && <button ref={expandButton} type="button" title={fullscreen ? '退出全屏（Ctrl+Shift+F / Esc）' : '全屏（Ctrl+Shift+F）'} aria-label={fullscreen ? `退出代码块 ${index + 1} 全屏` : `全屏代码块 ${index + 1}`} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" aria-pressed={fullscreen} onClick={toggleFullscreen}>{fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>}
         <button type="button" className="preview-copy" data-preview-copy={index} aria-label={`复制代码块 ${index + 1}`} title="复制代码"><Copy size={14} className="preview-copy-icon" /><Check size={14} className="preview-copy-check" /></button>
       </div>
     </div>
     <div className="preview-code-body html-block-source" hidden={preview} dangerouslySetInnerHTML={{ __html: sourceHtml }} />
     <div className="html-block-preview" hidden={!preview} style={{ height }}>
-      <HtmlPreview ref={runtime} entry={entry} files={noFiles} standalone onHeight={setHeight} onEscape={restore} />
+      <HtmlPreview ref={runtime} entry={entry} files={noFiles} standalone onHeight={setHeight} onEscape={restore} onToggleFullscreen={toggleFullscreen} />
     </div>
   </dialog>;
 }

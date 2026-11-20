@@ -185,7 +185,7 @@ export function App() {
           {visible.map((snippet, index) => <button key={snippet.path} className={`snippet-item ${selected?.path === snippet.path ? 'active' : ''}`} onClick={event => selectSnippet(event.currentTarget, snippet.path, query ? results[index]?.tabId : undefined)}>
             <div className="snippet-folder"><FolderIcon icon={folders.get(snippet.folder)?.icon} size={12} /><span>{folderLabel(snippet.folder)}</span></div>
             <div className="snippet-item-title"><strong>{snippet.name}</strong>{snippet.type === 'transform' && <span className="snippet-type-badge" role="img" aria-label="转换片段" title="转换片段"><ArrowLeftRight size={12} aria-hidden="true" /></span>}</div>
-            <p>{snippet.summary || '暂无说明'}</p>
+            {snippet.summary && <p>{snippet.summary}</p>}
             <div className="snippet-item-bottom"><span>{snippet.tags.slice(0, 3).map(tag => <span className="list-tag" key={tag}>{tag}</span>)}</span></div>
             {query && results[index]?.tabTitle && <div className="matched-tab"><Code2 size={11} />{results[index].tabTitle}</div>}
           </button>)}

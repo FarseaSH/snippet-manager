@@ -1,16 +1,22 @@
 export type PlaceholderType = 'text' | 'number' | 'date';
 export interface PlaceholderOccurrence {
   start: number; end: number; raw: string; name: string; type: PlaceholderType;
-  format?: string; pattern?: string; defaultValue?: string;
+  format?: string; pattern?: string; hint?: string; defaultValue?: string;
 }
 export interface PlaceholderField {
-  name: string; type: PlaceholderType; defaultValue?: string; pattern?: string;
+  name: string; type: PlaceholderType; defaultValue?: string; pattern?: string; hint?: string;
   date: boolean; time: boolean; seconds: boolean; issue?: string;
 }
 export interface PlaceholderTemplate { occurrences: PlaceholderOccurrence[]; fields: PlaceholderField[]; issues: string[] }
 export type PlaceholderValues = Record<string, string>;
 const dateTokens = /YYYY|YY|MM|DD|HH|mm|ss|M|D|H|m|s/g;
 const defaultFormat = 'YYYY-MM-DD';
+
+export function placeholderHelp(hint = ''): { description: string; example?: string } {
+  const marker = /e\.g\./i.exec(hint);
+  const example = marker ? hint.slice(marker.index + marker[0].length).trim() : '';
+  return example ? { description: hint.slice(0, marker!.index).trim(), example } : { description: hint.trim() };
+}
 
 function formatParts(format: string): { value: string; token: boolean }[] {
   const parts: { value: string; token: boolean }[] = [];
@@ -101,6 +107,7 @@ function declaration(code: string, start: number): { occurrence?: PlaceholderOcc
   let type: PlaceholderType = 'text';
   let format: string | undefined;
   let pattern: string | undefined;
+  let hint: string | undefined;
   let defaultValue: string | undefined;
   if (code[position] === ':') {
     position++;
@@ -138,6 +145,18 @@ function declaration(code: string, start: number): { occurrence?: PlaceholderOcc
       if (type === 'date') return fail('date 不支持正则表达式，请使用日期格式');
       try { new RegExp(`^(?:${pattern})$`); } catch { return fail('正则表达式无效'); }
     }
+    if (code[position] === '[') {
+      position++;
+      let text = '';
+      while (position < code.length && code[position] !== ']' && code[position] !== '@') {
+        if (code[position] === '\\' && [']', '@', '\\'].includes(code[position + 1])) {
+          text += code[position + 1]; position += 2;
+        } else text += code[position++];
+      }
+      if (code[position] !== ']') return fail('填写提示缺少结束 ]，提示中的 @ 需写成 \\@');
+      hint = text.trim() || undefined;
+      position++;
+    }
     if (code[position] === ':') {
       position++;
       defaultValue = '';
@@ -149,7 +168,7 @@ function declaration(code: string, start: number): { occurrence?: PlaceholderOcc
   }
   if (code[position] !== '@') return fail('语法无效或缺少结束 @');
   const end = position + 1;
-  return { end, occurrence: { start, end, raw: code.slice(start, end), name, type, format, pattern, defaultValue } };
+  return { end, occurrence: { start, end, raw: code.slice(start, end), name, type, format, pattern, hint, defaultValue } };
 }
 
 function normalizedDefault(type: PlaceholderType, value: string) {
@@ -173,10 +192,12 @@ export function parsePlaceholders(code: string): PlaceholderTemplate {
     const existing = fields.get(occurrence.name);
     const requirements = occurrence.type === 'date' ? dateRequirements(occurrence.format) : { date: false, time: false, seconds: false };
     if (!existing) {
-      fields.set(occurrence.name, { name: occurrence.name, type: occurrence.type, defaultValue: occurrence.defaultValue, pattern: occurrence.pattern, ...requirements });
+      fields.set(occurrence.name, { name: occurrence.name, type: occurrence.type, defaultValue: occurrence.defaultValue, pattern: occurrence.pattern, hint: occurrence.hint, ...requirements });
     } else {
       if (existing.type !== occurrence.type || existing.pattern !== occurrence.pattern || existing.defaultValue !== undefined && occurrence.defaultValue !== undefined && normalizedDefault(existing.type, existing.defaultValue) !== normalizedDefault(occurrence.type, occurrence.defaultValue)) existing.issue = `同名变量“${occurrence.name}”的类型、正则或默认值不一致`;
       existing.defaultValue ??= occurrence.defaultValue;
+      if (existing.hint && occurrence.hint && existing.hint !== occurrence.hint) issues.push(`同名变量“${occurrence.name}”的填写提示不一致，已采用第一个非空提示`);
+      existing.hint ??= occurrence.hint;
       existing.date ||= requirements.date;
       existing.time ||= requirements.time;
       existing.seconds ||= requirements.seconds;
@@ -193,7 +214,8 @@ export function parsePlaceholders(code: string): PlaceholderTemplate {
 }
 
 export function placeholderValue(field: PlaceholderField, values: PlaceholderValues): string | undefined {
-  return Object.hasOwn(values, field.name) ? values[field.name] : field.defaultValue;
+  const input = Object.hasOwn(values, field.name) ? values[field.name] : undefined;
+  return input === undefined || input === '' ? field.defaultValue ?? input : input;
 }
 
 export function replacePlaceholders(code: string, template: PlaceholderTemplate, values: PlaceholderValues = {}): string {

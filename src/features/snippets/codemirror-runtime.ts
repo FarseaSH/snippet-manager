@@ -6,6 +6,7 @@ import { languages } from '@codemirror/language-data';
 import { search, searchKeymap } from '@codemirror/search';
 import { tags } from '@lezer/highlight';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
+import { characterSelection } from './codemirror-selection';
 
 const externalChange = Annotation.define<boolean>();
 const configurations = new WeakMap<EditorView, { language: Compartment; readonly: Compartment; revision: number }>();
@@ -76,8 +77,6 @@ const tomorrow = [
     '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'transparent' },
     '&.cm-focused[data-has-selection="false"] .cm-activeLine': { backgroundColor: '#f8f8f8' },
     '&.cm-focused[data-has-selection="false"] .cm-activeLineGutter': { color: '#4d4d4c' },
-    '.cm-selectionLayer .cm-selectionBackground': { backgroundColor: '#ececec' },
-    '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': { backgroundColor: '#fbe8de' },
     '.cm-content::selection, .cm-content ::selection': { backgroundColor: 'transparent', color: 'var(--cm-token-color)' },
     '.cm-matchingBracket': { backgroundColor: '#efefef', outline: '1px solid #d1d1d1' },
     '.cm-foldPlaceholder': { backgroundColor: '#f3f4f4', color: '#71717a', border: '1px solid #d1d1d1', borderRadius: '3px', padding: '0 4px' },
@@ -112,7 +111,7 @@ export function createEditor(parent: HTMLElement, code: string, editable: boolea
     state: EditorState.create({
       doc: code.replace(/\r\n?/g, '\n'),
       extensions: [
-        tomorrow, lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), drawSelection(),
+        tomorrow, lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), drawSelection(), characterSelection,
         history(), indentOnInput(), documentIndentation, EditorState.tabSize.of(4), bracketMatching(),
         EditorState.allowMultipleSelections.of(true),
         foldGutter({ markerDOM(open) {

@@ -9,6 +9,7 @@ import './date-picker.css';
 interface Props {
   field: PlaceholderField;
   value: string | undefined;
+  inputValue: string;
   id: string;
   describedBy?: string;
   onChange(value: string): void;
@@ -17,7 +18,7 @@ interface Props {
 const pad = (value: number) => String(value).padStart(2, '0');
 const dateText = (date: Date) => `${String(date.getFullYear()).padStart(4, '0')}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
-export function DateParameterInput({ field, value, id, describedBy, onChange }: Props) {
+export function DateParameterInput({ field, value, inputValue, id, describedBy, onChange }: Props) {
   const picker = useRef<DatePicker>(null);
   const [open, setOpen] = useState(false);
   const parts = splitDateValue(value ?? '');
@@ -43,11 +44,11 @@ export function DateParameterInput({ field, value, id, describedBy, onChange }: 
   return <div className="placeholder-date-input">
     <DatePicker ref={picker}
       id={id} aria-label={label} aria-invalid={String(invalid)} aria-describedby={describedBy}
-      selected={selected} value={display(value ?? '')}
+      selected={selected} value={display(inputValue)}
       locale={zhCN} dateFormatCalendar="yyyy年 M月" calendarStartDay={1}
       dateFormat={field.date ? field.time ? `yyyy-MM-dd HH:mm${field.seconds ? ':ss' : ''}` : 'yyyy-MM-dd' : `HH:mm${field.seconds ? ':ss' : ''}`}
-      autoComplete="off" placeholderText={field.date ? field.time ? '选择日期和时间' : '选择日期' : '选择时间'}
-      customInput={<ParameterInput active={open} defaultText={field.defaultValue === undefined ? undefined : display(field.defaultValue)} icon={<Icon size={15} />} />}
+      autoComplete="off"
+      customInput={<ParameterInput active={open} defaultText={field.defaultValue === undefined ? undefined : display(field.defaultValue)} onAcceptDefault={() => onChange(field.defaultValue!)} icon={<Icon size={15} />} />}
       onChangeRaw={event => {
         if (!(event?.target instanceof HTMLInputElement)) return;
         event.preventDefault();

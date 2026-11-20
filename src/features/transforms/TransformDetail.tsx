@@ -10,14 +10,19 @@ import { SnippetHeading } from '../snippets/SnippetHeading';
 import { TabOutline } from '../snippets/TabOutline';
 import { useLiveTransform } from './useLiveTransform';
 import { TransformOutput } from './TransformOutput';
+import { useFullscreenShortcut } from '../snippets/useFullscreenShortcut';
+import { useInputHistory } from '../snippets/useInputHistory';
 
 interface Props { snippet: Snippet; initialTab?: string; showTitle?: boolean; notify(message: string): void }
 const tabs = [{ id: 'transform', title: '转换' }, { id: 'transform-code', title: '转换代码' }];
 const textSnippet = (id: string, title: string, language: string, code: string): SubSnippet => ({ id, title, language, code, codeHtml: '', sourceOrder: 0, sourceDescription: '', descriptionHtml: '' });
+const inputGroup = { key: 'transform', fields: ['input'], persistent: true };
 
 export function TransformDetail({ snippet, initialTab, showTitle, notify }: Props) {
   const [active, setActive] = useState(initialTab === 'transform-code' ? initialTab : 'transform');
-  const [input, setInput] = useState('');
+  const history = useInputHistory(snippet.path, [inputGroup]);
+  const input = history.values[inputGroup.key]?.input ?? '';
+  const setInput = (value: string) => history.change(inputGroup, 'input', value);
   const [visitedCode, setVisitedCode] = useState(initialTab === 'transform-code');
   const [focused, setFocused] = useState<'source' | 'output'>();
   const [copied, setCopied] = useState('');
@@ -47,6 +52,11 @@ export function TransformDetail({ snippet, initialTab, showTitle, notify }: Prop
     if (id === 'transform-code') setVisitedCode(true);
     rowRef.current?.querySelector<HTMLButtonElement>(`[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+  function toggleSourceFocus() {
+    setFocused(value => value === 'source' ? undefined : 'source');
+    if (focused === 'source') expandRef.current?.focus({ preventScroll: true });
+  }
+  useFullscreenShortcut(toggleSourceFocus, { enabled: active === 'transform-code' });
   async function copy(value: string, key: string) {
     try {
       await copyText(value); notify(key === 'output' ? '转换结果已复制' : '代码已复制');
@@ -82,14 +92,14 @@ export function TransformDetail({ snippet, initialTab, showTitle, notify }: Prop
                 </div>
                 <div className="transform-input-error" id="transform-input-error" role="alert">{invalid ? result.message : ''}</div>
               </section>
-              <TransformOutput result={result} fallbackLanguage={config.outputLanguage} notify={notify} focused={focused === 'output'} onToggleFocus={() => setFocused(value => value === 'output' ? undefined : 'output')} />
+              <TransformOutput result={result} fallbackLanguage={config.outputLanguage} notify={notify} focused={focused === 'output'} active={active === 'transform'} onToggleFocus={() => setFocused(value => value === 'output' ? undefined : 'output')} />
             </div>
             <div className="transform-status-row"><span><Zap size={13} />停止输入 500ms 后自动转换</span><span role="status" aria-live="polite">{status}</span></div>
             {result.status === 'error' && <p className="transform-runtime-error" role="alert">{result.message}</p>}
           </div>
           <div id="panel-transform-code" className="transform-source-panel" role="tabpanel" aria-labelledby="tab-transform-code" hidden={active !== 'transform-code'}>
             <div className="code-card">
-              <button ref={expandRef} type="button" className="icon-button code-expand" aria-label={focused === 'source' ? '恢复正文' : '展开代码'} onClick={() => setFocused(value => value === 'source' ? undefined : 'source')}>{focused === 'source' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
+              <button ref={expandRef} type="button" className="icon-button code-expand" aria-label={focused === 'source' ? '恢复正文' : '展开代码'} title={focused === 'source' ? '恢复正文（Ctrl+Shift+F / Esc）' : '展开代码（Ctrl+Shift+F）'} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" aria-pressed={focused === 'source'} onClick={toggleSourceFocus}>{focused === 'source' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
               {visitedCode && <CodeEditor snippet={source} copyEnabled={active === 'transform-code'} onCopy={() => copy(source.code, 'code')} />}
               <footer className="code-statusbar">
                 <button type="button" className="copy-code" onClick={() => void copy(source.code, 'code')}>{copied === 'code' ? <Check size={16} /> : <Copy size={16} />}{copied === 'code' ? '已复制' : '复制当前代码'}</button>

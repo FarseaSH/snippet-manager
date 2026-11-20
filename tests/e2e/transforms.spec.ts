@@ -76,7 +76,7 @@ test('转换类型默认实时执行，校验、源码切换、复制及手机�
   expect(errors).toEqual([]);
 });
 
-test('异步转换取消过期结果，输入恢复旧内容仍重新执行，切换片段重置状态', async ({ page }) => {
+test('异步转换取消过期结果，输入恢复旧内容仍重新执行，切换片段恢复历史输入', async ({ page }) => {
   await writeCode('export default async function transform(input) { await new Promise(resolve => setTimeout(resolve, input === "slow" ? 1400 : 20)); return { ok: true, output: input }; }');
   await page.goto(route);
   const panel = page.getByRole('tabpanel', { name: '转换', exact: true });
@@ -93,8 +93,9 @@ test('异步转换取消过期结果，输入恢复旧内容仍重新执行，�
   await expect(copy).toBeEnabled();
   await page.goto('snippet/git/branch');
   await page.goto(route);
-  await expect(copy).toBeDisabled();
-  await expect(panel.getByRole('status')).toHaveText('待输入');
+  await expect(copy).toBeEnabled();
+  await copy.click();
+  expect(await clipboard(page)).toBe('fast');
 });
 
 test('运行异常、非法返回值和无限循环均不阻塞页面，恢复后空输出可复制', async ({ page }) => {

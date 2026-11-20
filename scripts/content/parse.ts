@@ -119,7 +119,7 @@ export async function parseSnippet(raw: string, path: string, diagnostics: Diagn
   }
   const allDescriptionNodes = tree.children.filter(node => !(node.type === 'code' && /^ {0,3}(`{3,}|~{3,})/.test(body.slice(node.position?.start.offset ?? 0))));
   const descriptionText = allDescriptionNodes.map(plainText).join('\n');
-  const summaryText = main.map(previewText).join(' ').trim() || allDescriptionNodes.map(previewText).join(' ');
+  const summaryText = (parts.length ? main : tree.children).map(previewText).join(' ');
   return {
     path, folder: path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '', name, tags, raw,
     mainDescription: source(main), descriptionHtml, descriptionText, summary: summaryText.replace(/\s+/g, ' ').trim(), subSnippets: parts.map(part => part.sub),

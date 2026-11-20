@@ -3,9 +3,9 @@ import type { PreviewFile } from './html-project';
 import type { CodeEditorHandle } from './CodeEditor';
 
 export interface HtmlPreviewHandle extends CodeEditorHandle { rerun(): void }
-interface Props { entry: PreviewFile; files: PreviewFile[]; onEscape(): void; onHeight?(height: number): void; standalone?: boolean; ref?: Ref<HtmlPreviewHandle> }
+interface Props { entry: PreviewFile; files: PreviewFile[]; onEscape(): void; onToggleFullscreen?(): void; onHeight?(height: number): void; standalone?: boolean; ref?: Ref<HtmlPreviewHandle> }
 
-export function HtmlPreview({ entry, files, onEscape, onHeight, standalone = false, ref }: Props) {
+export function HtmlPreview({ entry, files, onEscape, onToggleFullscreen, onHeight, standalone = false, ref }: Props) {
   const iframe = useRef<HTMLIFrameElement>(null);
   const [rendered, setRendered] = useState<{ html: string; token: string }>();
   const [errors, setErrors] = useState<string[]>([]);
@@ -16,7 +16,8 @@ export function HtmlPreview({ entry, files, onEscape, onHeight, standalone = fal
   const position = useRef({ x: 0, y: 0 });
   const escape = useRef(onEscape);
   const height = useRef(onHeight);
-  useLayoutEffect(() => { escape.current = onEscape; height.current = onHeight; }, [onEscape, onHeight]);
+  const fullscreen = useRef(onToggleFullscreen);
+  useLayoutEffect(() => { escape.current = onEscape; height.current = onHeight; fullscreen.current = onToggleFullscreen; }, [onEscape, onHeight, onToggleFullscreen]);
   useEffect(() => {
     let cancelled = false;
     const immediate = !signature.current || previousRevision.current !== revision;
@@ -45,6 +46,7 @@ export function HtmlPreview({ entry, files, onEscape, onHeight, standalone = fal
       const data = event.data;
       if (data.type === 'ready') setReady(true);
       if (data.type === 'escape') escape.current();
+      if (data.type === 'toggle-fullscreen') fullscreen.current?.();
       if (data.type === 'height' && Number.isFinite(data.height) && data.height > 0) height.current?.(Math.max(120, Math.min(480, data.height)));
       if (data.type === 'scroll' && Number.isFinite(data.x) && Number.isFinite(data.y)) position.current = { x: data.x, y: data.y };
       if (data.type === 'error' && typeof data.message === 'string') setErrors(previous => previous.includes(data.message) ? previous : [...previous, data.message].slice(0, 20));

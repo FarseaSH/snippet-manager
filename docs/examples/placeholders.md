@@ -32,7 +32,7 @@ echo "邮件：@email:text/^[^@]+@[^@]+$/:user\@example.com@"
 
 # Markdown 预览
 
-输入标题后，预览和源代码应同步更新，内嵌代码块也可以复制。输入 HTML 时仍按安全的 Markdown 规则渲染。
+输入标题后，源码立即更新，预览在停止输入约 250ms 后更新，连续输入时保留原预览，不应反复闪现加载文案。滚动预览后修改标题，应尽量保持阅读位置；底栏复制最新源码，内嵌代码块复制当前可见版本。输入 HTML 时仍按安全的 Markdown 规则渲染。
 
 ````markdown
 ## @title:text:每日报告@
@@ -46,9 +46,21 @@ echo "邮件：@email:text/^[^@]+@[^@]+$/:user\@example.com@"
 
 # 独立参数
 
-这里的 `name` 与其他 Tab 分开保存。切回其他 Tab，已填写的参数应保持；点击“重置参数”只重置当前 Tab。
+这里的 `name` 与其他 Tab 分开保存。切回其他 Tab、刷新或重新打开页面，已填写的参数应保持；点击“重置参数”只重置当前 Tab 并删除其保存的历史。可分别填写不同值、刷新检查归属，再重置当前 Tab 并确认其他 Tab 的内容仍在。
 
 ```python
 name = "@name:text:独立值@"
 print(name)
+```
+
+# 填写提示与默认值
+
+灰色默认值在聚焦时保留，直接输入会替换它；清空后恢复默认值，按右方向键 `→` 接受默认值并继续编辑。点击名称旁的 `e.g.` 示例可替换当前输入。长正则显示 `/ … /`，悬停、键盘聚焦或点击查看完整规则。无默认值且未填写的框保持空白和红色，不显示提示文案。
+
+```text
+用户名：@username:text/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/[填写用户名 e.g. alice-smith]:demo@
+服务器：@server:[服务器地址 e.g. localhost:3000]:localhost@
+备注：@note:text[可包含空格 e.g. alpha  beta]@
+邮件：@contact:text[联系邮箱 e.g. user\@example.com]:guest\@example.com@
+开始时间：@meeting:date(YYYY-MM-DD HH:mm)[选择开始时间 e.g. 2027-01-02 03:04]:2026-11-10T14:30@
 ```

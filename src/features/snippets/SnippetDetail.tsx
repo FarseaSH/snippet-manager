@@ -6,6 +6,7 @@ import { copyText } from '../../services/clipboard';
 import { SnippetDescription } from './SnippetDescription';
 import { LanguageIcon } from './LanguageIcon';
 import { MarkdownPreview } from './MarkdownPreview';
+import { MarkdownPreviewPlaceholder } from './MarkdownPreviewPlaceholder';
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor';
 import { parsePlaceholders, replacePlaceholders, type PlaceholderValues } from '../../core/placeholders';
 import { PlaceholderInputs } from './PlaceholderInputs';
@@ -14,11 +15,14 @@ import { useRenderedCode } from './useRenderedCode';
 import { SnippetHeading } from './SnippetHeading';
 import { TransformDetail } from '../transforms/TransformDetail';
 import { HtmlPreview, type HtmlPreviewHandle } from './HtmlPreview';
+import { useFullscreenShortcut } from './useFullscreenShortcut';
+import { parameterHistoryGroups } from '../../core/input-history';
+import { useInputHistory } from './useInputHistory';
 
 interface Props { snippet: Snippet; initialTab?: string; showTitle?: boolean; notify(message: string): void }
 
 export function SnippetDetail(props: Props) {
-  return props.snippet.type === 'transform' ? <TransformDetail key={props.snippet.path} {...props} /> : <CodeSnippetDetail {...props} />;
+  return props.snippet.type === 'transform' ? <TransformDetail key={props.snippet.path} {...props} /> : <CodeSnippetDetail key={props.snippet.path} {...props} />;
 }
 
 function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Props) {
@@ -36,35 +40,33 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
   const [copied, setCopied] = useState(false);
   const tabsRef = useRef<HTMLDivElement>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const [parameters, setParameters] = useState<{ path: string; tabs: Record<string, PlaceholderValues> }>({ path: snippet.path, tabs: {} });
+  const historyGroups = useMemo(() => parameterHistoryGroups(snippet.subSnippets), [snippet.subSnippets]);
+  const history = useInputHistory(snippet.path, [...historyGroups.values()]);
+  const parameters = useMemo<Record<string, PlaceholderValues>>(() => Object.fromEntries(snippet.subSnippets.map(part => [part.id, history.values[historyGroups.get(part.id)!.key] ?? {}])), [snippet.subSnippets, history.values, historyGroups]);
   useEffect(() => {
     setActive(initialTab || snippet.subSnippets[0]?.id || '');
   }, [snippet.path, initialTab]);
   useEffect(() => () => clearTimeout(copyTimer.current), []);
   const sub = snippet.subSnippets.find(part => part.id === active) ?? snippet.subSnippets[0];
   const template = useMemo(() => parsePlaceholders(sub?.code ?? ''), [sub?.code]);
-  const values = parameters.path === snippet.path ? parameters.tabs[sub?.id ?? ''] ?? {} : {};
+  const values = parameters[sub?.id ?? ''] ?? {};
   const code = useMemo(() => replacePlaceholders(sub?.code ?? '', template, values), [sub?.code, template, values]);
   const { snippet: displaySub, error: renderError } = useRenderedCode(sub, code);
   function changeParameter(name: string, value: string) {
     if (!sub) return;
-    setParameters(previous => {
-      const tabs = previous.path === snippet.path ? previous.tabs : {};
-      return { path: snippet.path, tabs: { ...tabs, [sub.id]: { ...tabs[sub.id], [name]: value } } };
-    });
+    history.change(historyGroups.get(sub.id)!, name, value);
   }
   function resetParameters() {
     if (!sub) return;
-    setParameters(previous => ({ path: snippet.path, tabs: { ...(previous.path === snippet.path ? previous.tabs : {}), [sub.id]: {} } }));
+    history.clear(historyGroups.get(sub.id)!);
   }
-  useEffect(() => { setParameters({ path: snippet.path, tabs: {} }); }, [snippet.path]);
   const isMarkdown = Boolean(sub?.markdownPreview);
   const isHtml = !!sub && ['html', 'html5', 'htm'].includes(sub.language.trim().toLowerCase());
   const isPreviewable = isMarkdown || isHtml;
   const isPreview = isPreviewable && !showSource;
   const previewFiles = useMemo(() => snippet.subSnippets.map(part => ({
     id: part.id, title: part.title, language: part.language,
-    code: replacePlaceholders(part.code, parsePlaceholders(part.code), parameters.path === snippet.path ? parameters.tabs[part.id] ?? {} : {}),
+    code: replacePlaceholders(part.code, parsePlaceholders(part.code), parameters[part.id] ?? {}),
   })), [snippet, parameters]);
   useLayoutEffect(() => {
     if (isHtml && sub && (visitedHtml.path !== snippet.path || !visitedHtml.ids.has(sub.id))) {
@@ -110,6 +112,7 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
     restoreEditor.current = saveCodeViewState();
     setFocused(value => !value);
   }
+  useFullscreenShortcut(toggleFocus, { enabled: Boolean(sub) });
   async function copy(value: string, message: string, code = false) {
     try {
       await copyText(value); notify(message);
@@ -148,7 +151,7 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
             <div className="window-traffic-lights" aria-hidden="true"><span className="window-dot red" /><span className="window-dot yellow" /><span className="window-dot green" /></div>
             <span className="code-window-title">{isHtml ? 'HTML' : 'Markdown'} 预览</span>
           </>}
-          <button ref={expandButtonRef} type="button" className="icon-button code-expand" aria-label={focused ? '恢复正文' : '展开代码'} title={focused ? '恢复正文（Esc）' : '展开代码'} aria-pressed={focused} aria-controls="code-panel" onClick={toggleFocus}>
+          <button ref={expandButtonRef} type="button" className="icon-button code-expand" aria-label={focused ? '恢复正文' : '展开代码'} title={focused ? '恢复正文（Ctrl+Shift+F / Esc）' : '展开代码（Ctrl+Shift+F）'} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" aria-pressed={focused} aria-controls="code-panel" onClick={toggleFocus}>
             {focused ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
         </div>
@@ -157,10 +160,10 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
             <CodeEditor ref={editorRef} key={`${snippet.path}:${sub.id}`} snippet={displaySub!} copyEnabled={!isPreview} onCopy={() => copy(code, '代码已复制', true)} />
           </div>
           {isMarkdown && <div className={`code-view ${showSource ? 'is-inactive' : ''}`}>
-            {displaySub?.markdownPreview ? <MarkdownPreview ref={previewRef} key={`${snippet.path}:${sub.id}`} preview={displaySub.markdownPreview} notify={notify} /> : <div className="markdown-preview" role="status">{renderError ? '预览暂不可用，请查看源代码。' : '正在更新预览…'}</div>}
+            {displaySub?.markdownPreview ? <MarkdownPreview ref={previewRef} key={`${snippet.path}:${sub.id}`} preview={displaySub.markdownPreview} notify={notify} /> : <MarkdownPreviewPlaceholder key={`${snippet.path}:${sub.id}`} error={renderError} />}
           </div>}
           {previewFiles.filter(file => ['html', 'html5', 'htm'].includes(file.language.trim().toLowerCase()) && ((visitedHtml.path === snippet.path && visitedHtml.ids.has(file.id)) || file.id === sub.id)).map(file => <div key={`${snippet.path}:${file.id}`} className={`code-view ${!isHtml || file.id !== sub.id || showSource ? 'is-inactive' : ''}`}>
-            <HtmlPreview ref={file.id === sub.id ? htmlPreviewRef : undefined} entry={file} files={previewFiles} onEscape={() => setFocused(false)} />
+            <HtmlPreview ref={file.id === sub.id ? htmlPreviewRef : undefined} entry={file} files={previewFiles} onEscape={() => setFocused(false)} onToggleFullscreen={() => { if (isHtml && file.id === sub.id && !showSource) toggleFocus(); }} />
           </div>)}
         </div>
         <footer className="code-statusbar" aria-label="当前代码状态栏">

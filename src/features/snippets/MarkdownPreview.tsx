@@ -10,12 +10,20 @@ interface Props { preview: MarkdownPreviewData; notify(message: string): void; r
 
 export function MarkdownPreview({ preview, notify, ref }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const scroll = useRef({ top: 0, left: 0 });
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const [copiedBlocks, setCopiedBlocks] = useState<Set<number>>(new Set());
   const [htmlBlocks, setHtmlBlocks] = useState<{ host: HTMLElement; index: number; sourceHtml: string }[]>([]);
   // Retain the generated, escaped Shiki markup when Strict Mode repeats setup.
   // Portals let interactive blocks live inside arbitrary Markdown lists/quotes.
   const sourceCache = useRef(new WeakMap<HTMLElement, string>());
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (viewport) {
+      viewport.scrollTop = scroll.current.top;
+      viewport.scrollLeft = scroll.current.left;
+    }
+  }, [preview.html]);
   useLayoutEffect(() => {
     const hosts = viewportRef.current?.querySelectorAll<HTMLElement>('[data-preview-html]') ?? [];
     setHtmlBlocks(Array.from(hosts, host => {
@@ -43,7 +51,9 @@ export function MarkdownPreview({ preview, notify, ref }: Props) {
       return () => { if (viewport) { viewport.scrollTop = top; viewport.scrollLeft = left; } };
     },
   }), []);
-  return <div ref={viewportRef} className="markdown-preview" role="region" aria-label="Markdown 预览" onClick={async event => {
+  return <div ref={viewportRef} className="markdown-preview" role="region" aria-label="Markdown 预览" onScroll={event => {
+    scroll.current = { top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft };
+  }} onClick={async event => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-preview-copy]');
     if (!button || !event.currentTarget.contains(button)) return;
     const index = Number(button.dataset.previewCopy);
