@@ -57,7 +57,10 @@ test('整段复制使用参数替换后的原文，包含折叠和屏幕外代�
   await page.keyboard.down(mod);
   await expect(overlay).toBeVisible();
   await page.getByRole('tab', { name: 'Other', exact: true }).click();
-  await expect(page.locator('.code-copy-overlay.is-active')).toHaveCount(0);
+  await expect(page.locator('.code-copy-overlay.is-active')).toHaveCount(1);
+  await expect(overlay).toContainText('单击复制代码');
+  await overlay.click();
+  await expect.poll(() => clipboard(page)).toBe('other');
   await page.keyboard.up(mod);
 });
 
@@ -139,19 +142,21 @@ test('编辑器加载期间按住修饰键，加载完成后直接显示复制�
   } finally { release(); }
 });
 
-test('Markdown 和 HTML 预览不显示遮罩，源码可复制，HTML 预览交互正常', async ({ page }) => {
+test('Markdown 仅代码块显示遮罩，HTML 预览保持交互，源码可整段复制', async ({ page }) => {
   const markdown = '# Preview\n\n```js\nconsole.log(1)\n```';
   const html = '<button onclick="this.textContent=\'clicked\'">click</button>';
   await fs.writeFile(file, snippet([['Markdown', 'markdown', markdown], ['HTML', 'html', html]]));
   await page.goto(route);
   const mod = await shortcut(page);
   await page.keyboard.down(mod);
-  await expect(page.locator('.code-copy-overlay.is-active')).toHaveCount(0);
+  await expect(page.locator('.markdown-code-copy.is-active')).toHaveCount(1);
+  await page.locator('.markdown-code-copy.is-active').click();
+  await expect.poll(() => clipboard(page)).toBe('console.log(1)');
   await page.keyboard.up(mod);
   await page.getByRole('button', { name: '查看源代码', exact: true }).click();
   await expect(page.locator('.code-copy-overlay.is-active')).toHaveCount(0);
   await page.keyboard.down(mod);
-  const overlay = page.locator('.code-copy-overlay');
+  const overlay = page.locator('.code-copy-region .code-copy-overlay');
   await expect(overlay).toBeVisible();
   await overlay.click();
   await expect.poll(() => clipboard(page)).toBe(markdown);

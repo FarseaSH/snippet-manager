@@ -224,7 +224,8 @@ test('活动栏位于最左，搜索位于列表栏，窄屏搜索保持连续�
   await expect(page.locator('.sidebar')).toHaveCSS('background-color', 'rgb(245, 245, 245)');
   await expect(page.locator('.snippet-panel .global-search')).toBeVisible();
   await expect(page.locator('.app-header')).toHaveCount(0);
-  expect((await page.locator('.app-body').boundingBox())!.y).toBe(0);
+  expect((await page.locator('.app-body').boundingBox())!.y).toBe(await page.locator('.app').evaluate(node => node.getBoundingClientRect().top + node.clientTop));
+  expect(await page.locator('.snippet-list').evaluate(node => getComputedStyle(node, '::-webkit-scrollbar').width)).toBe('4px');
   await page.getByLabel('搜索代码片段').fill('json=');
   await expect(page.locator('.snippet-item')).toHaveCount(1);
   await page.getByLabel('搜索代码片段').blur();
@@ -261,7 +262,7 @@ test('活动栏切换全库和设置，路径栏品牌返回首页', async ({ pa
   await expect(page.locator('.sidebar .all-folder')).toBeVisible();
   const rail = (await activity.boundingBox())!;
   expect(rail.x).toBe(0);
-  expect(rail.width).toBe(56);
+  expect(rail.width).toBe(48);
   const desktopLogo = (await logo.boundingBox())!;
   expect(desktopLogo.y - rail.y).toBe(12);
   expect((await library.boundingBox())!.y - desktopLogo.y - desktopLogo.height).toBe(12);
@@ -799,7 +800,7 @@ test('平板文件夹入口与键盘 Tab 导航', async ({ page }) => {
   await expect(drawer.getByRole('button', { name: '返回', exact: true })).toBeFocused();
   await expect(drawer.locator('.drawer-toolbar h1')).toHaveText('Python Requests');
   await expect(drawer.locator('.detail-title-row h1')).toHaveCount(0);
-  await expect.poll(() => drawer.boundingBox()).toEqual({ x: 56, y: 0, width: 844, height: 850 });
+  await expect.poll(() => drawer.boundingBox()).toEqual(await page.locator('.app-body').boundingBox());
   await expect(page.locator('.sidebar')).toHaveAttribute('inert', '');
   await page.getByRole('tab', { name: 'GET Request' }).focus();
   await page.keyboard.press('ArrowRight');
@@ -1233,7 +1234,7 @@ test('行内代码支持修饰键复制、悬停提示和局部反馈，不触�
     await blockCode.dispatchEvent('click', { metaKey: true, button: 0 });
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('keep-code-block-copy');
     await page.keyboard.down(modifier);
-    await blockCode.hover();
+    await preview.locator('.markdown-code-copy').hover();
     expect(await blockCode.evaluate(el => getComputedStyle(el).cursor)).not.toBe('pointer');
     await page.keyboard.up(modifier);
     await page.getByRole('button', { name: '查看源代码' }).click();

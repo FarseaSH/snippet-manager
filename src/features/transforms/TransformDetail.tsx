@@ -86,7 +86,7 @@ export function TransformDetail({ snippet, initialTab, showTitle, notify }: Prop
                   {config.example !== undefined && <button type="button" onClick={() => setInput(config.example!)}>填入示例</button>}
                   <button type="button" onClick={() => setInput('')}>清空</button>
                 </div></div>
-                <div className={`transform-editor-body${invalid ? ' is-invalid' : ''}`}>
+                <div className={`transform-editor-body transform-input-body${invalid ? ' is-invalid' : ''}`}>
                   <CodeEditor snippet={inputSnippet} editable onChange={setInput} ariaLabel="转换输入" invalid={invalid} describedBy={invalid ? 'transform-input-error' : undefined} />
                   {input === '' && <span className="transform-placeholder" aria-hidden="true">输入或粘贴待转换的文本</span>}
                 </div>

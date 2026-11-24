@@ -160,7 +160,7 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
             <CodeEditor ref={editorRef} key={`${snippet.path}:${sub.id}`} snippet={displaySub!} copyEnabled={!isPreview} onCopy={() => copy(code, '代码已复制', true)} />
           </div>
           {isMarkdown && <div className={`code-view ${showSource ? 'is-inactive' : ''}`}>
-            {displaySub?.markdownPreview ? <MarkdownPreview ref={previewRef} key={`${snippet.path}:${sub.id}`} preview={displaySub.markdownPreview} notify={notify} /> : <MarkdownPreviewPlaceholder key={`${snippet.path}:${sub.id}`} error={renderError} />}
+            {displaySub?.markdownPreview ? <MarkdownPreview ref={previewRef} key={`${snippet.path}:${sub.id}`} preview={displaySub.markdownPreview} active={!showSource} notify={notify} /> : <MarkdownPreviewPlaceholder key={`${snippet.path}:${sub.id}`} error={renderError} />}
           </div>}
           {previewFiles.filter(file => ['html', 'html5', 'htm'].includes(file.language.trim().toLowerCase()) && ((visitedHtml.path === snippet.path && visitedHtml.ids.has(file.id)) || file.id === sub.id)).map(file => <div key={`${snippet.path}:${file.id}`} className={`code-view ${!isHtml || file.id !== sub.id || showSource ? 'is-inactive' : ''}`}>
             <HtmlPreview ref={file.id === sub.id ? htmlPreviewRef : undefined} entry={file} files={previewFiles} onEscape={() => setFocused(false)} onToggleFullscreen={() => { if (isHtml && file.id === sub.id && !showSource) toggleFocus(); }} />

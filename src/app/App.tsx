@@ -11,6 +11,8 @@ import { belongsTo, compareNames, folderLabel, folderPath, pagePath, SETTINGS_PA
 import { searchSnippets } from '../core/search';
 import { readPreference, savePreference } from '../services/clipboard';
 import type { Folder } from '../core/types';
+import { useToastPlacement } from './useToastPlacement';
+import { useCopyModifierListener } from '../features/snippets/useCopyModifier';
 
 interface NavigationState { query: string; expanded: Set<string>; tab?: string; tabPath?: string }
 type Action = { type: 'query'; value: string } | { type: 'expand'; path: string } | { type: 'reveal'; path: string } | { type: 'tab'; path: string; tab?: string };
@@ -26,12 +28,14 @@ function reducer(state: NavigationState, action: Action): NavigationState {
 export function App() {
   const { data, error, retry } = useContent();
   const pwa = usePwa();
+  useCopyModifierListener();
   const [state, dispatch] = useReducer(reducer, { query: '', expanded: new Set<string>() });
   const [toast, setToast] = useState('');
   const [listScrolling, setListScrolling] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 700px)').matches);
   const [isNarrow, setIsNarrow] = useState(() => window.matchMedia('(max-width: 1100px)').matches);
   const searchRef = useRef<HTMLInputElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
   const drawerBackRef = useRef<HTMLButtonElement>(null);
   const drawerOpener = useRef<HTMLButtonElement | null>(null);
   const restoreDone = useRef(false);
@@ -47,6 +51,7 @@ export function App() {
   const mobileDrawer = drawerOpen && isMobile;
   const listDepth = location.state?.listDepth as number | undefined;
   const selected = data?.library.snippets.find(snippet => snippet.path.replace(/\.md$/i, '') === snippetPath);
+  const toastPlacement = useToastPlacement(detailRef, Boolean(selected) && !isSettings, toast);
   const folder = selected
     ? (typeof location.state?.listFolder === 'string' ? location.state.listFolder : selected.folder)
     : (pathname === '/folder' ? '' : pathname.startsWith('/folder/') ? pathname.slice(8) : '');
@@ -191,7 +196,7 @@ export function App() {
           </button>)}
         </div>
       </section>}
-      detail={<section className={`detail-region${drawerOpen ? ' detail-drawer' : ''}`} role={drawerOpen ? 'dialog' : undefined} aria-label={drawerOpen ? '片段详情' : undefined} aria-modal={mobileDrawer || undefined} onClick={drawerOpen ? followDrawerLink : undefined}>
+      detail={<section ref={detailRef} className={`detail-region${drawerOpen ? ' detail-drawer' : ''}`} role={drawerOpen ? 'dialog' : undefined} aria-label={drawerOpen ? '片段详情' : undefined} aria-modal={mobileDrawer || undefined} onClick={drawerOpen ? followDrawerLink : undefined}>
         {drawerOpen && <div className="drawer-toolbar">
           <button type="button" ref={drawerBackRef} className="icon-button drawer-back" aria-label="返回" title="返回片段列表（Esc）" onClick={closeDrawer}><ArrowLeft size={20} /></button>
           {selected && <h1 className="drawer-title">{selected.name}{selected.type === 'transform' && <span className="snippet-type-badge snippet-heading-type"><ArrowLeftRight size={12} aria-hidden="true" />转换</span>}</h1>}
@@ -210,6 +215,6 @@ export function App() {
     />}
     {!isSettings && <div className="mobile-cache" inert={mobileDrawer}>{!pwa.online ? <WifiOff size={12} /> : <span className="status-dot" />}{cacheText}{pwa.canInstall && <button onClick={() => void pwa.install()}>安装</button>}{pwa.cache === 'error' && <button onClick={pwa.retry}>重试</button>}</div>}
     {pwa.updateReady && <div className="update-banner" role="status" inert={mobileDrawer}><ArrowDownToLine size={16} /><span>新版本已完整准备好</span><button onClick={pwa.update}>刷新更新</button></div>}
-    <div className={`toast ${toast ? 'visible' : ''}`} role="status" aria-live="polite">{toast && <><Check size={15} />{toast}</>}</div>
+    <div className={`toast ${toast ? 'visible' : ''}`} style={toastPlacement} role="status" aria-live="polite">{toast && <><Check size={15} /><span>{toast}</span></>}</div>
   </div>;
 }

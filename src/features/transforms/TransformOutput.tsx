@@ -89,7 +89,7 @@ export function TransformOutput({ result, fallbackLanguage, notify, focused, act
         </div>
         {isMarkdown && <div className={`code-view${isPreview ? '' : ' is-inactive'}`}>
           {displayed && (snippet?.markdownPreview
-            ? <MarkdownPreview ref={previewRef} preview={snippet.markdownPreview} notify={notify} />
+            ? <MarkdownPreview ref={previewRef} preview={snippet.markdownPreview} active={active && isPreview} notify={notify} />
             : <MarkdownPreviewPlaceholder error={error} />)}
         </div>}
         {!displayed && <span className="transform-placeholder" aria-hidden="true">{result.status === 'running' ? '正在转换…' : '转换结果将显示在这里'}</span>}

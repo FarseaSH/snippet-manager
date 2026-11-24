@@ -3,14 +3,16 @@ import { Check, Copy, Eye, Maximize2, Minimize2, RotateCcw } from 'snippet-manag
 import { LanguageIcon } from './LanguageIcon';
 import { HtmlPreview, type HtmlPreviewHandle } from './HtmlPreview';
 import { useFullscreenShortcut } from './useFullscreenShortcut';
+import { MarkdownCodeCopyOverlay } from './MarkdownCodeCopyOverlay';
 
 const noFiles: [] = [];
-interface Props { index: number; code: string; language: string; sourceHtml: string }
+interface Props { index: number; code: string; language: string; sourceHtml: string; copyEnabled: boolean; copyVersion: unknown; onCopy(): Promise<boolean> }
 
-export function HtmlCodeBlock({ index, code, language, sourceHtml }: Props) {
+export function HtmlCodeBlock({ index, code, language, sourceHtml, copyEnabled, copyVersion, onCopy }: Props) {
   const [preview, setPreview] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const [height, setHeight] = useState(160);
+  const [sourceBody, setSourceBody] = useState<HTMLDivElement | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const previewButton = useRef<HTMLButtonElement>(null);
   const expandButton = useRef<HTMLButtonElement>(null);
@@ -55,7 +57,8 @@ export function HtmlCodeBlock({ index, code, language, sourceHtml }: Props) {
         <button type="button" className="preview-copy" data-preview-copy={index} aria-label={`复制代码块 ${index + 1}`} title="复制代码"><Copy size={14} className="preview-copy-icon" /><Check size={14} className="preview-copy-check" /></button>
       </div>
     </div>
-    <div className="preview-code-body html-block-source" hidden={preview} dangerouslySetInnerHTML={{ __html: sourceHtml }} />
+    <div ref={setSourceBody} className="preview-code-body html-block-source" hidden={preview} dangerouslySetInnerHTML={{ __html: sourceHtml }} />
+    {sourceBody && <MarkdownCodeCopyOverlay host={sourceBody} enabled={copyEnabled && !preview} version={copyVersion} onCopy={onCopy} />}
     <div className="html-block-preview" hidden={!preview} style={{ height }}>
       <HtmlPreview ref={runtime} entry={entry} files={noFiles} standalone onHeight={setHeight} onEscape={restore} onToggleFullscreen={toggleFullscreen} />
     </div>
