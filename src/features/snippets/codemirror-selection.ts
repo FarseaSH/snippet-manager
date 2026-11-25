@@ -54,7 +54,12 @@ function selectionMarkers(view: EditorView, whitespace: boolean): LayerMarker[] 
               }
             }
           } else {
-            markers.push(...RectangleMarker.forRange(view, backgroundClass, EditorSelection.range(pos, end)));
+            for (let start = pos; start < end;) {
+              const boundary = view.lineWrapping ? view.moveToLineBoundary(EditorSelection.cursor(start, 1), true, true).head : end;
+              const stop = Math.min(end, boundary > start ? boundary : end);
+              markers.push(...RectangleMarker.forRange(view, backgroundClass, EditorSelection.range(start, stop)));
+              start = stop;
+            }
           }
         }
         // A newline has no glyph box of its own. Give only a selected, visible
@@ -72,7 +77,7 @@ function selectionMarkers(view: EditorView, whitespace: boolean): LayerMarker[] 
   return markers;
 }
 
-const selectionChanged = (update: ViewUpdate) => update.selectionSet || update.docChanged || update.viewportChanged;
+const selectionChanged = (update: ViewUpdate) => update.selectionSet || update.docChanged || update.viewportChanged || update.geometryChanged;
 
 export const characterSelection = [
   layer({
@@ -90,11 +95,11 @@ export const characterSelection = [
   EditorView.theme({
     // Keep drawSelection's cursors and native-selection suppression intact.
     '.cm-selectionLayer .cm-selectionBackground': { display: 'none' },
-    '.cm-characterSelectionBackground': { backgroundColor: '#ececec' },
-    '&.cm-focused .cm-characterSelectionBackground': { backgroundColor: '#fbe8de' },
+    '.cm-characterSelectionBackground': { backgroundColor: 'var(--code-selection-inactive)' },
+    '&.cm-focused .cm-characterSelectionBackground': { backgroundColor: 'var(--code-selection-active)' },
     '.cm-selectedWhitespace': {
       fontFamily: 'var(--font-code)', fontSize: 'inherit', lineHeight: 'normal',
-      color: '#a1a1aa', opacity: '0.6', textAlign: 'center', whiteSpace: 'pre',
+      color: 'var(--code-whitespace-color)', opacity: '0.6', textAlign: 'center', whiteSpace: 'pre',
       overflow: 'hidden',
     },
   }),

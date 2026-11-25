@@ -18,6 +18,7 @@ import { HtmlPreview, type HtmlPreviewHandle } from './HtmlPreview';
 import { useFullscreenShortcut } from './useFullscreenShortcut';
 import { parameterHistoryGroups } from '../../core/input-history';
 import { useInputHistory } from './useInputHistory';
+import { CodeWrapButton, useCodeWrapping } from './CodeWrapping';
 
 interface Props { snippet: Snippet; initialTab?: string; showTitle?: boolean; notify(message: string): void }
 
@@ -48,6 +49,7 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
   }, [snippet.path, initialTab]);
   useEffect(() => () => clearTimeout(copyTimer.current), []);
   const sub = snippet.subSnippets.find(part => part.id === active) ?? snippet.subSnippets[0];
+  const [wrapping, toggleWrapping] = useCodeWrapping();
   const template = useMemo(() => parsePlaceholders(sub?.code ?? ''), [sub?.code]);
   const values = parameters[sub?.id ?? ''] ?? {};
   const code = useMemo(() => replacePlaceholders(sub?.code ?? '', template, values), [sub?.code, template, values]);
@@ -151,13 +153,14 @@ function CodeSnippetDetail({ snippet, initialTab, showTitle = true, notify }: Pr
             <div className="window-traffic-lights" aria-hidden="true"><span className="window-dot red" /><span className="window-dot yellow" /><span className="window-dot green" /></div>
             <span className="code-window-title">{isHtml ? 'HTML' : 'Markdown'} 预览</span>
           </>}
+          {!isPreview && <div className="code-wrap-floating"><CodeWrapButton enabled={wrapping} onToggle={toggleWrapping} /></div>}
           <button ref={expandButtonRef} type="button" className="icon-button code-expand" aria-label={focused ? '恢复正文' : '展开代码'} title={focused ? '恢复正文（Ctrl+Shift+F / Esc）' : '展开代码（Ctrl+Shift+F）'} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" aria-pressed={focused} aria-controls="code-panel" onClick={toggleFocus}>
             {focused ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
         </div>
         <div className="code-views">
           <div className={`code-view ${isPreviewable && !showSource ? 'is-inactive' : ''}`}>
-            <CodeEditor ref={editorRef} key={`${snippet.path}:${sub.id}`} snippet={displaySub!} copyEnabled={!isPreview} onCopy={() => copy(code, '代码已复制', true)} />
+            <CodeEditor ref={editorRef} key={`${snippet.path}:${sub.id}`} snippet={displaySub!} wrapping={wrapping} copyEnabled={!isPreview} onCopy={() => copy(code, '代码已复制', true)} />
           </div>
           {isMarkdown && <div className={`code-view ${showSource ? 'is-inactive' : ''}`}>
             {displaySub?.markdownPreview ? <MarkdownPreview ref={previewRef} key={`${snippet.path}:${sub.id}`} preview={displaySub.markdownPreview} active={!showSource} notify={notify} /> : <MarkdownPreviewPlaceholder key={`${snippet.path}:${sub.id}`} error={renderError} />}

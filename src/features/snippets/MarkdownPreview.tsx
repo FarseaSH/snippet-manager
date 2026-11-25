@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownCodeCopyOverlay } from './MarkdownCodeCopyOverlay';
 import { syncCopyModifier } from './useCopyModifier';
+import { MarkdownCodeWrapping } from './CodeWrapping';
 
 interface Props { preview: MarkdownPreviewData; notify(message: string): void; active?: boolean; ref?: Ref<CodeEditorHandle> }
 
@@ -91,6 +92,7 @@ export function MarkdownPreview({ preview, notify, active = true, ref }: Props) 
     void copyBlock(index);
   }}>
     <InlineCodeCopy><div className="markdown markdown-preview-content" dangerouslySetInnerHTML={{ __html: preview.html }} /></InlineCodeCopy>
+    {codeBlocks.map(({ host, index }) => <MarkdownCodeWrapping key={`wrap:${index}`} host={host} active={active} />)}
     {codeBlocks.map(({ host, index }) => <MarkdownCodeCopyOverlay key={index} host={host} enabled={active} version={preview} onCopy={() => copyBlock(index)} />)}
     {htmlBlocks.map(({ host, index, sourceHtml }) => {
       const block = preview.codeBlocks[index];

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeftRight, Check, Code2, Copy, Maximize2, Minimize2, Zap } from 'snippet-manager/icons/ui';
 import type { Snippet, SubSnippet } from '../../core/types';
 import { languageName } from '../../core/language-name';
 import { copyText } from '../../services/clipboard';
-import { CodeEditor } from '../snippets/CodeEditor';
+import { CodeEditor, type CodeEditorHandle } from '../snippets/CodeEditor';
 import { LanguageIcon } from '../snippets/LanguageIcon';
 import { SnippetDescription } from '../snippets/SnippetDescription';
 import { SnippetHeading } from '../snippets/SnippetHeading';
@@ -12,6 +12,7 @@ import { useLiveTransform } from './useLiveTransform';
 import { TransformOutput } from './TransformOutput';
 import { useFullscreenShortcut } from '../snippets/useFullscreenShortcut';
 import { useInputHistory } from '../snippets/useInputHistory';
+import { CodeWrapButton, useCodeWrapping } from '../snippets/CodeWrapping';
 
 interface Props { snippet: Snippet; initialTab?: string; showTitle?: boolean; notify(message: string): void }
 const tabs = [{ id: 'transform', title: '转换' }, { id: 'transform-code', title: '转换代码' }];
@@ -24,7 +25,14 @@ export function TransformDetail({ snippet, initialTab, showTitle, notify }: Prop
   const input = history.values[inputGroup.key]?.input ?? '';
   const setInput = (value: string) => history.change(inputGroup, 'input', value);
   const [visitedCode, setVisitedCode] = useState(initialTab === 'transform-code');
-  const [focused, setFocused] = useState<'source' | 'output'>();
+  const [wrapping, toggleWrapping] = useCodeWrapping();
+  const [focused, setFocused] = useState<'input' | 'source' | 'output'>();
+  const activePane = useRef<'input' | 'output' | undefined>(undefined);
+  const inputRef = useRef<CodeEditorHandle>(null);
+  const outputRef = useRef<CodeEditorHandle>(null);
+  const sourceRef = useRef<CodeEditorHandle>(null);
+  const inputExpandRef = useRef<HTMLButtonElement>(null);
+  const restoreView = useRef<(() => void) | undefined>(undefined);
   const [copied, setCopied] = useState('');
   const copyTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -40,23 +48,45 @@ export function TransformDetail({ snippet, initialTab, showTitle, notify }: Prop
   useEffect(() => {
     if (initialTab) selectTab(initialTab);
   }, [initialTab]);
+  useLayoutEffect(() => { restoreView.current?.(); restoreView.current = undefined; }, [focused]);
   useEffect(() => {
-    if (focused !== 'source') return;
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); setFocused(undefined); expandRef.current?.focus(); } };
+    const track = (event: Event) => {
+      const pane = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-transform-pane]') : null;
+      activePane.current = pane?.dataset.transformPane === 'input' ? 'input' : pane?.dataset.transformPane === 'output' ? 'output' : undefined;
+    };
+    document.addEventListener('pointerdown', track, true); document.addEventListener('focusin', track, true);
+    return () => { document.removeEventListener('pointerdown', track, true); document.removeEventListener('focusin', track, true); };
+  }, []);
+  useEffect(() => {
+    if (!focused) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('.html-code-dialog:modal') || (event.target instanceof Element && event.target.closest('.html-code-dialog'))) return;
+      const editor = focused === 'input' ? inputRef.current : focused === 'source' ? sourceRef.current : outputRef.current;
+      event.preventDefault(); event.stopPropagation();
+      if (!editor?.closeSearch?.()) toggleFocus();
+    };
     window.addEventListener('keydown', escape, true);
     return () => window.removeEventListener('keydown', escape, true);
   }, [focused]);
   function selectTab(id: string) {
     if (!tabs.some(tab => tab.id === id)) return;
-    setActive(id); setFocused(undefined);
+    setActive(id); setFocused(undefined); activePane.current = undefined;
     if (id === 'transform-code') setVisitedCode(true);
     rowRef.current?.querySelector<HTMLButtonElement>(`[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
-  function toggleSourceFocus() {
-    setFocused(value => value === 'source' ? undefined : 'source');
-    if (focused === 'source') expandRef.current?.focus({ preventScroll: true });
+  function toggleFocus(target?: 'input' | 'output' | 'source') {
+    const restores = [inputRef.current, outputRef.current, sourceRef.current].map(editor => editor?.saveViewState());
+    const previous = focused;
+    const next = previous ? undefined : target ?? (active === 'transform-code' ? 'source' : activePane.current ?? 'input');
+    const inSearch = document.activeElement instanceof Element && Boolean(document.activeElement.closest('.cm-search'));
+    restoreView.current = () => {
+      restores.forEach(restore => restore?.());
+      if ((next === 'input' && !inSearch) || previous === 'input') inputRef.current?.focus?.();
+      else if (previous === 'source') expandRef.current?.focus({ preventScroll: true });
+    };
+    setFocused(next);
   }
-  useFullscreenShortcut(toggleSourceFocus, { enabled: active === 'transform-code' });
+  useFullscreenShortcut(() => toggleFocus());
   async function copy(value: string, key: string) {
     try {
       await copyText(value); notify(key === 'output' ? '转换结果已复制' : '代码已复制');
@@ -64,7 +94,7 @@ export function TransformDetail({ snippet, initialTab, showTitle, notify }: Prop
       return true;
     } catch { notify('复制失败，请手动选择并复制内容'); return false; }
   }
-  return <div className={`snippet-detail-layout${focused === 'output' ? ' output-focused' : focused === 'source' ? ' code-focused' : ''}`}>
+  return <div className={`snippet-detail-layout${focused === 'input' ? ' input-focused' : focused === 'output' ? ' output-focused' : focused === 'source' ? ' code-focused' : ''}`}>
     <div className="snippet-detail-scroll">
       <article className="snippet-detail transform-detail" aria-label="片段详情">
         <SnippetHeading snippet={snippet} showTitle={showTitle} notify={notify} />
@@ -81,26 +111,32 @@ export function TransformDetail({ snippet, initialTab, showTitle, notify }: Prop
           </div>
           <div id="panel-transform" className="transform-panel" role="tabpanel" aria-labelledby="tab-transform" hidden={active !== 'transform'}>
             <div className="transform-editors">
-              <section className="transform-editor" aria-label="输入区">
-                <div className="transform-editor-heading"><span>输入 <span className="transform-language">{config.inputLanguage}</span></span><div>
-                  {config.example !== undefined && <button type="button" onClick={() => setInput(config.example!)}>填入示例</button>}
-                  <button type="button" onClick={() => setInput('')}>清空</button>
+              <section className="transform-editor transform-input-editor" data-transform-pane="input" aria-label="输入区">
+                <div className="transform-editor-heading"><span>输入 <span className="transform-language">{languageName(config.inputLanguage)}</span></span><div>
+                  {config.example !== undefined && <button type="button" onClick={() => { setInput(config.example!); inputRef.current?.focus?.(); }}>填入示例</button>}
+                  <button type="button" onClick={() => { setInput(''); inputRef.current?.focus?.(); }}>清空</button>
                 </div></div>
                 <div className={`transform-editor-body transform-input-body${invalid ? ' is-invalid' : ''}`}>
-                  <CodeEditor snippet={inputSnippet} editable onChange={setInput} ariaLabel="转换输入" invalid={invalid} describedBy={invalid ? 'transform-input-error' : undefined} />
+                  <div className="code-window-bar is-floating">
+                    <div className="code-wrap-floating"><CodeWrapButton enabled={wrapping} onToggle={toggleWrapping} /></div>
+                    <button ref={inputExpandRef} type="button" className="icon-button code-expand" aria-label={focused === 'input' ? '恢复正文' : '全屏输入'} title={focused === 'input' ? '恢复正文（Ctrl+Shift+F / Esc）' : '全屏输入（Ctrl+Shift+F）'} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" aria-pressed={focused === 'input'} onClick={() => toggleFocus('input')}>{focused === 'input' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
+                  </div>
+                  <CodeEditor ref={inputRef} snippet={inputSnippet} wrapping={wrapping} editable onChange={setInput} ariaLabel="转换输入" invalid={invalid} describedBy={invalid ? 'transform-input-error' : undefined} />
                   {input === '' && <span className="transform-placeholder" aria-hidden="true">输入或粘贴待转换的文本</span>}
                 </div>
                 <div className="transform-input-error" id="transform-input-error" role="alert">{invalid ? result.message : ''}</div>
+                {focused === 'input' && <footer className="transform-input-status"><div className="transform-status-row"><span><Zap size={13} />停止输入 500ms 后自动转换</span><span role="status">{status}</span></div>{result.status === 'error' && <p className="transform-runtime-error" role="alert">{result.message}</p>}</footer>}
               </section>
-              <TransformOutput result={result} fallbackLanguage={config.outputLanguage} notify={notify} focused={focused === 'output'} active={active === 'transform'} onToggleFocus={() => setFocused(value => value === 'output' ? undefined : 'output')} />
+              <TransformOutput ref={outputRef} result={result} fallbackLanguage={config.outputLanguage} notify={notify} focused={focused === 'output'} active={active === 'transform'} onToggleFocus={() => toggleFocus('output')} />
             </div>
             <div className="transform-status-row"><span><Zap size={13} />停止输入 500ms 后自动转换</span><span role="status" aria-live="polite">{status}</span></div>
             {result.status === 'error' && <p className="transform-runtime-error" role="alert">{result.message}</p>}
           </div>
           <div id="panel-transform-code" className="transform-source-panel" role="tabpanel" aria-labelledby="tab-transform-code" hidden={active !== 'transform-code'}>
             <div className="code-card">
-              <button ref={expandRef} type="button" className="icon-button code-expand" aria-label={focused === 'source' ? '恢复正文' : '展开代码'} title={focused === 'source' ? '恢复正文（Ctrl+Shift+F / Esc）' : '展开代码（Ctrl+Shift+F）'} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" aria-pressed={focused === 'source'} onClick={toggleSourceFocus}>{focused === 'source' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
-              {visitedCode && <CodeEditor snippet={source} copyEnabled={active === 'transform-code'} onCopy={() => copy(source.code, 'code')} />}
+              <div className="code-wrap-floating"><CodeWrapButton enabled={wrapping} onToggle={toggleWrapping} /></div>
+              <button ref={expandRef} type="button" className="icon-button code-expand" aria-label={focused === 'source' ? '恢复正文' : '展开代码'} title={focused === 'source' ? '恢复正文（Ctrl+Shift+F / Esc）' : '展开代码（Ctrl+Shift+F）'} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" aria-pressed={focused === 'source'} onClick={() => toggleFocus('source')}>{focused === 'source' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
+              {visitedCode && <CodeEditor ref={sourceRef} snippet={source} wrapping={wrapping} copyEnabled={active === 'transform-code'} onCopy={() => copy(source.code, 'code')} />}
               <footer className="code-statusbar">
                 <button type="button" className="copy-code" onClick={() => void copy(source.code, 'code')}>{copied === 'code' ? <Check size={16} /> : <Copy size={16} />}{copied === 'code' ? '已复制' : '复制当前代码'}</button>
                 <div className="code-statusbar-controls"><span className="language"><LanguageIcon language={source.language} size={16} />{languageName(source.language)}</span></div>

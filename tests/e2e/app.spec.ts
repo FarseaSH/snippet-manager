@@ -721,7 +721,7 @@ test('打开片段保留全部或父目录列表，历史与移动端返回保�
     const selectedFolders = await folderSelection.allTextContents();
     expect(selectedFolders).toHaveLength(1);
     for (const name of ['Format JSON', 'Python Requests']) {
-      await page.locator('.snippet-item').filter({ hasText: name }).click();
+      await page.locator('.snippet-item').filter({ has: page.locator('.snippet-item-title strong', { hasText: name }) }).click();
       await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
       await expect(page.locator('.snippet-item')).toHaveCount(count);
       expect(await page.locator('.snippet-item-title strong').allTextContents()).toEqual(names);

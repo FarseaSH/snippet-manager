@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Check, Copy } from 'snippet-manager/icons/ui';
 import { useCodeCopyAction } from './useCodeCopyAction';
 import { useCopyGeometry } from './useCopyModifier';
+import { useMarkdownCodeSelection } from './useMarkdownCodeSelection';
 
 interface Props { host: HTMLElement; enabled?: boolean; version: unknown; onCopy(): Promise<boolean> }
 function clientBox(node: HTMLElement) {
@@ -10,6 +11,7 @@ function clientBox(node: HTMLElement) {
   return { left: rect.left + node.clientLeft, top: rect.top + node.clientTop, right: rect.left + node.clientLeft + node.clientWidth, bottom: rect.top + node.clientTop + node.clientHeight };
 }
 export function MarkdownCodeCopyOverlay({ host, enabled = true, version, onCopy }: Props) {
+  useMarkdownCodeSelection(host, enabled, version);
   const container = host.parentElement;
   const [bounds, setBounds] = useState<{ left: number; top: number; width: number; height: number }>();
   function measure() {

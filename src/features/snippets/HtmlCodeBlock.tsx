@@ -4,6 +4,7 @@ import { LanguageIcon } from './LanguageIcon';
 import { HtmlPreview, type HtmlPreviewHandle } from './HtmlPreview';
 import { useFullscreenShortcut } from './useFullscreenShortcut';
 import { MarkdownCodeCopyOverlay } from './MarkdownCodeCopyOverlay';
+import { CodeWrapButton, useCodeWrapping, useStaticCodeWrapping } from './CodeWrapping';
 
 const noFiles: [] = [];
 interface Props { index: number; code: string; language: string; sourceHtml: string; copyEnabled: boolean; copyVersion: unknown; onCopy(): Promise<boolean> }
@@ -13,6 +14,8 @@ export function HtmlCodeBlock({ index, code, language, sourceHtml, copyEnabled, 
   const [fullscreen, setFullscreen] = useState(false);
   const [height, setHeight] = useState(160);
   const [sourceBody, setSourceBody] = useState<HTMLDivElement | null>(null);
+  const [wrapping, toggleWrapping] = useCodeWrapping();
+  useStaticCodeWrapping(sourceBody, wrapping, `${preview}:${code}`);
   const dialog = useRef<HTMLDialogElement>(null);
   const previewButton = useRef<HTMLButtonElement>(null);
   const expandButton = useRef<HTMLButtonElement>(null);
@@ -54,6 +57,7 @@ export function HtmlCodeBlock({ index, code, language, sourceHtml, copyEnabled, 
       <div className="html-block-actions">
         {preview && <button type="button" title="重新运行" aria-label={`重新运行代码块 ${index + 1}`} onClick={() => runtime.current?.rerun()}><RotateCcw size={14} /></button>}
         {preview && <button ref={expandButton} type="button" title={fullscreen ? '退出全屏（Ctrl+Shift+F / Esc）' : '全屏（Ctrl+Shift+F）'} aria-label={fullscreen ? `退出代码块 ${index + 1} 全屏` : `全屏代码块 ${index + 1}`} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" aria-pressed={fullscreen} onClick={toggleFullscreen}>{fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>}
+        {!preview && <CodeWrapButton enabled={wrapping} onToggle={toggleWrapping} />}
         <button type="button" className="preview-copy" data-preview-copy={index} aria-label={`复制代码块 ${index + 1}`} title="复制代码"><Copy size={14} className="preview-copy-icon" /><Check size={14} className="preview-copy-check" /></button>
       </div>
     </div>

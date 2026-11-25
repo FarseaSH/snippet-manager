@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { Check, Code2, Copy, Eye, Maximize2, Minimize2 } from 'snippet-manager/icons/ui';
 import type { SubSnippet } from '../../core/types';
 import { languageName } from '../../core/language-name';
@@ -10,11 +10,12 @@ import { MarkdownPreview } from '../snippets/MarkdownPreview';
 import { MarkdownPreviewPlaceholder } from '../snippets/MarkdownPreviewPlaceholder';
 import { useRenderedCode } from '../snippets/useRenderedCode';
 import type { TransformState } from './useLiveTransform';
-import { useFullscreenShortcut } from '../snippets/useFullscreenShortcut';
+import { CodeWrapButton, useCodeWrapping } from '../snippets/CodeWrapping';
 
-interface Props { result: TransformState; fallbackLanguage: string; notify(message: string): void; focused: boolean; active: boolean; onToggleFocus(): void }
+interface Props { result: TransformState; fallbackLanguage: string; notify(message: string): void; focused: boolean; active: boolean; onToggleFocus(): void; ref?: Ref<CodeEditorHandle> }
 
-export function TransformOutput({ result, fallbackLanguage, notify, focused, active, onToggleFocus }: Props) {
+export function TransformOutput({ result, fallbackLanguage, notify, focused, active, onToggleFocus, ref }: Props) {
+  const [wrapping, toggleWrapping] = useCodeWrapping();
   const [lastLanguage, setLastLanguage] = useState(() => resolveTransformLanguage(undefined, fallbackLanguage));
   const [showSource, setShowSource] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -57,15 +58,13 @@ export function TransformOutput({ result, fallbackLanguage, notify, focused, act
     restoreView.current = () => { restoreCode?.(); restorePreview?.(); };
     onToggleFocus();
   }
-  useFullscreenShortcut(toggleFocus, { enabled: active });
-  useEffect(() => {
-    if (!focused) return;
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !document.querySelector('.html-code-dialog:modal')) { event.preventDefault(); toggleFocus(); }
-    };
-    window.addEventListener('keydown', escape, true);
-    return () => window.removeEventListener('keydown', escape, true);
-  }, [focused, onToggleFocus]);
+  useImperativeHandle(ref, () => ({
+    saveViewState() {
+      const code = editorRef.current?.saveViewState(), preview = previewRef.current?.saveViewState();
+      return () => { code?.(); preview?.(); };
+    },
+    closeSearch: () => !isPreview && Boolean(editorRef.current?.closeSearch?.()),
+  }), [isPreview]);
   async function copy() {
     try {
       await copyText(output); notify('转换结果已复制');
@@ -73,7 +72,7 @@ export function TransformOutput({ result, fallbackLanguage, notify, focused, act
       return true;
     } catch { notify('复制失败，请手动选择并复制内容'); return false; }
   }
-  return <section className="transform-editor" aria-label="输出区">
+  return <section className="transform-editor" data-transform-pane="output" aria-label="输出区">
     <div className="transform-editor-heading"><span>输出</span></div>
     <div id="transform-output" className={`transform-editor-body transform-output-body${isPreview ? ' markdown-window is-preview' : ''}`}>
       <div className={`code-window-bar${isPreview ? '' : ' is-floating'}`}>
@@ -81,11 +80,12 @@ export function TransformOutput({ result, fallbackLanguage, notify, focused, act
         <div className="window-traffic-lights" aria-hidden="true"><span className="window-dot red" /><span className="window-dot yellow" /><span className="window-dot green" /></div>
         <span className="code-window-title">Markdown 预览</span>
         </>}
+        {!isPreview && <div className="code-wrap-floating"><CodeWrapButton enabled={wrapping} onToggle={toggleWrapping} /></div>}
         <button ref={expandRef} type="button" className="icon-button code-expand" aria-label={focused ? '恢复正文' : '全屏输出'} title={focused ? '恢复正文（Ctrl+Shift+F / Esc）' : '全屏输出（Ctrl+Shift+F）'} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" aria-pressed={focused} aria-controls="transform-output" onClick={toggleFocus}>{focused ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
       </div>
       <div className="code-views">
         <div className={`code-view${isPreview ? ' is-inactive' : ''}`}>
-          <CodeEditor ref={editorRef} snippet={snippet!} ariaLabel="转换输出" copyEnabled={result.status === 'success' && !isPreview} onCopy={copy} />
+          <CodeEditor ref={editorRef} snippet={snippet!} wrapping={wrapping} ariaLabel="转换输出" copyEnabled={result.status === 'success' && !isPreview} onCopy={copy} />
         </div>
         {isMarkdown && <div className={`code-view${isPreview ? '' : ' is-inactive'}`}>
           {displayed && (snippet?.markdownPreview

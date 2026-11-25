@@ -100,7 +100,7 @@ test('HTML iframe 内切换全屏并保留交互，隐藏页面和伪造消息�
   await expect(page.locator('.snippet-detail-layout')).not.toHaveClass(/code-focused/);
 });
 
-test('转换页仅切换当前输出或源码，代码与 Markdown 输出均可重复切换', async ({ page }) => {
+test('转换页根据激活的输入、输出或源码切换，代码与 Markdown 输出均可重复切换', async ({ page }) => {
   await fs.copyFile('docs/examples/transform-dynamic-language.md', file);
   await page.goto(route);
   const input = page.getByRole('textbox', { name: '转换输入', exact: true });
@@ -108,7 +108,7 @@ test('转换页仅切换当前输出或源码，代码与 Markdown 输出均可�
   const output = page.locator('#transform-output');
   await expect(output.getByRole('heading', { name: 'Output report' })).toBeVisible();
   await page.keyboard.press(hotkey);
-  await expect(page.locator('.snippet-detail-layout')).toHaveClass(/output-focused/);
+  await expect(page.locator('.snippet-detail-layout')).toHaveClass(/input-focused/);
   await expect(page.locator('.snippet-detail-layout')).not.toHaveClass(/code-focused/);
   await page.keyboard.press(hotkey);
   await expect(page.locator('.snippet-detail-layout')).not.toHaveClass(/output-focused/);
@@ -121,7 +121,7 @@ test('转换页仅切换当前输出或源码，代码与 Markdown 输出均可�
   await input.fill('json\n{"retained":true}');
   await expect(output.locator('.language')).toHaveText('JSON');
   await page.keyboard.press(hotkey);
-  await expect(page.locator('.snippet-detail-layout')).toHaveClass(/output-focused/);
+  await expect(page.locator('.snippet-detail-layout')).toHaveClass(/input-focused/);
   await page.keyboard.press(hotkey);
   await expect(page.locator('.snippet-detail-layout')).not.toHaveClass(/output-focused/);
   await page.getByRole('tab', { name: '转换代码', exact: true }).click();

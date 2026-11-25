@@ -13,12 +13,14 @@ import { readPreference, savePreference } from '../services/clipboard';
 import type { Folder } from '../core/types';
 import { useToastPlacement } from './useToastPlacement';
 import { useCopyModifierListener } from '../features/snippets/useCopyModifier';
+import { useScrollActivity } from '../hooks/useScrollActivity';
 
 interface NavigationState { query: string; expanded: Set<string>; tab?: string; tabPath?: string }
-type Action = { type: 'query'; value: string } | { type: 'expand'; path: string } | { type: 'reveal'; path: string } | { type: 'tab'; path: string; tab?: string };
+type Action = { type: 'query'; value: string } | { type: 'expand'; path: string } | { type: 'expand-all'; paths: string[] } | { type: 'reveal'; path: string } | { type: 'tab'; path: string; tab?: string };
 function reducer(state: NavigationState, action: Action): NavigationState {
   if (action.type === 'query') return { ...state, query: action.value };
   if (action.type === 'tab') return { ...state, tab: action.tab, tabPath: action.path };
+  if (action.type === 'expand-all') return { ...state, expanded: new Set(action.paths) };
   const expanded = new Set(state.expanded);
   if (action.type === 'expand') { if (expanded.has(action.path)) expanded.delete(action.path); else expanded.add(action.path); }
   else { const parts = action.path.split('/'); for (let index = 1; index <= parts.length; index++) expanded.add(parts.slice(0, index).join('/')); }
@@ -31,7 +33,7 @@ export function App() {
   useCopyModifierListener();
   const [state, dispatch] = useReducer(reducer, { query: '', expanded: new Set<string>() });
   const [toast, setToast] = useState('');
-  const [listScrolling, setListScrolling] = useState(false);
+  const [listScrolling, handleListScroll] = useScrollActivity();
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 700px)').matches);
   const [isNarrow, setIsNarrow] = useState(() => window.matchMedia('(max-width: 1100px)').matches);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -40,7 +42,6 @@ export function App() {
   const drawerOpener = useRef<HTMLButtonElement | null>(null);
   const restoreDone = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const listScrollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const location = useLocation();
   const navigate = useNavigate();
   let pathname = location.pathname.replace(/\/$/, '') || '/';
@@ -121,12 +122,6 @@ export function App() {
     return () => window.removeEventListener('keydown', shortcut);
   }, [closeDrawer, drawerOpen]);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
-  useEffect(() => () => clearTimeout(listScrollTimer.current), []);
-  function handleListScroll() {
-    setListScrolling(true);
-    clearTimeout(listScrollTimer.current);
-    listScrollTimer.current = setTimeout(() => setListScrolling(false), 1000);
-  }
   function notify(message: string) { setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 2200); }
   function goHome() {
     restoreDone.current = true;
@@ -154,7 +149,7 @@ export function App() {
     openSnippet(`/${url.pathname.slice(base.length)}${url.search}${url.hash}`);
   }
   const cacheText = !pwa.online ? '离线模式' : pwa.cache === 'dev' ? '内容实时更新' : pwa.cache === 'ready' ? '全库可离线使用' : pwa.cache === 'error' ? '离线准备失败 · 重试' : '正在准备离线内容';
-  const treeProps = { selected: folder, expanded: state.expanded, onExpand: (path: string) => dispatch({ type: 'expand', path }), onSelect: selectFolder };
+  const treeProps = { selected: folder, expanded: state.expanded, onExpand: (path: string) => dispatch({ type: 'expand', path }), onExpandAll: (paths: string[]) => dispatch({ type: 'expand-all', paths }), onSelect: selectFolder };
   const unknown = (snippetPath !== undefined && !selected) || (pathname.startsWith('/folder') && data && !folders.has(folder)) || (!['/', '/folder'].includes(pathname) && !pathname.startsWith('/snippet/') && !pathname.startsWith('/folder/'));
   const searchField = <div className="global-search"><Search size={17} /><input ref={searchRef} aria-label="搜索代码片段" placeholder="搜索名称、标签或代码…" value={state.query} onChange={event => dispatch({ type: 'query', value: event.target.value })} />{state.query ? <button className="clear-search" aria-label="清空搜索" onClick={() => dispatch({ type: 'query', value: '' })}><X size={15} /></button> : <kbd>/</kbd>}</div>;
   return <div className="app">

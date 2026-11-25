@@ -3,13 +3,13 @@ import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutt
 import { defaultKeymap, history, historyKeymap, redo } from '@codemirror/commands';
 import { bracketMatching, foldGutter, foldKeymap, foldService, HighlightStyle, indentOnInput, indentUnit, LanguageDescription, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
-import { search, searchKeymap } from '@codemirror/search';
+import { closeSearchPanel, search, searchKeymap } from '@codemirror/search';
 import { tags } from '@lezer/highlight';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { characterSelection } from './codemirror-selection';
 
 const externalChange = Annotation.define<boolean>();
-const configurations = new WeakMap<EditorView, { language: Compartment; readonly: Compartment; revision: number }>();
+const configurations = new WeakMap<EditorView, { language: Compartment; readonly: Compartment; wrapping: Compartment; revision: number }>();
 const aliases: Record<string, string> = {
   py: 'python', python3: 'python', js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'jsx',
   ts: 'typescript', tsx: 'tsx', shell: 'shell', sh: 'shell', bash: 'shell', shellscript: 'shell', zsh: 'shell',
@@ -106,6 +106,7 @@ const tomorrow = [
 export function createEditor(parent: HTMLElement, code: string, editable: boolean, onChange: (code: string) => void) {
   const language = new Compartment();
   const readonly = new Compartment();
+  const wrapping = new Compartment();
   const view = new EditorView({
     parent,
     state: EditorState.create({
@@ -126,7 +127,7 @@ export function createEditor(parent: HTMLElement, code: string, editable: boolea
         } }),
         indentationMarkers({ highlightActiveBlock: true, hideFirstIndent: false, thickness: 1, activeThickness: 1, colors: { light: '#e8e8e8', activeLight: '#999999' } }),
         search({ top: true }), keymap.of([{ key: 'Mod-Shift-z', run: redo, preventDefault: true }, ...searchKeymap, ...foldKeymap, ...defaultKeymap, ...historyKeymap]),
-        readonly.of(EditorState.readOnly.of(!editable)), language.of(indentationFolding),
+        readonly.of(EditorState.readOnly.of(!editable)), language.of(indentationFolding), wrapping.of([]),
         EditorView.editorAttributes.of(view => ({ 'data-has-selection': String(view.state.selection.ranges.some(range => !range.empty)) })),
         EditorView.contentAttributes.of({ role: 'textbox', 'aria-multiline': 'true', spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }),
         EditorView.updateListener.of(update => {
@@ -135,7 +136,7 @@ export function createEditor(parent: HTMLElement, code: string, editable: boolea
       ],
     }),
   });
-  configurations.set(view, { language, readonly, revision: 0 });
+  configurations.set(view, { language, readonly, wrapping, revision: 0 });
   return view;
 }
 
@@ -159,6 +160,16 @@ export function destroyEditor(view: EditorView) {
   configurations.delete(view);
   view.destroy();
 }
+
+export function setWrapping(view: EditorView, enabled: boolean) {
+  if (view.lineWrapping === enabled) return;
+  const config = configurations.get(view);
+  if (config) view.dispatch({ effects: [config.wrapping.reconfigure(enabled ? EditorView.lineWrapping : []), view.scrollSnapshot()] });
+  if (enabled) view.scrollDOM.scrollLeft = 0;
+  view.requestMeasure();
+}
+
+export function dismissSearch(view: EditorView) { return closeSearchPanel(view); }
 
 function changedRange(current: string, next: string) {
   if (current === next) return undefined;
