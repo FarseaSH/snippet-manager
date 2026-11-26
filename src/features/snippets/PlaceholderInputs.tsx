@@ -1,5 +1,5 @@
-import { lazy, Suspense, useId } from 'react';
-import { CalendarClock, CalendarDays, Clock3, Hash, Type } from 'snippet-manager/icons/ui';
+import { lazy, Suspense, useId, useState } from 'react';
+import { CalendarClock, CalendarDays, Clock3, Hash, RotateCcw, Type } from 'snippet-manager/icons/ui';
 import { placeholderHelp, placeholderValue, splitDateValue, validatePlaceholderValue, type PlaceholderTemplate, type PlaceholderValues } from '../../core/placeholders';
 import { ParameterInput } from './ParameterInput';
 import { PlaceholderRule } from './PlaceholderRule';
@@ -10,9 +10,12 @@ interface Props { template: PlaceholderTemplate; values: PlaceholderValues; onCh
 
 export function PlaceholderInputs({ template, values, onChange, onReset }: Props) {
   const id = useId();
+  const [resetCount, setResetCount] = useState(0);
   if (!template.fields.length && !template.issues.length) return null;
   return <section className="placeholder-form" aria-label="代码参数">
-    <div className="placeholder-heading"><span>代码参数</span><button type="button" onClick={onReset}>重置参数</button></div>
+    <div className="placeholder-heading"><span>代码参数</span><button type="button" className="placeholder-reset" title="重置参数" aria-label="重置参数" onClick={() => { onReset(); setResetCount(count => count + 1); }}>
+      <RotateCcw key={resetCount} size={15} aria-hidden="true" className={resetCount ? 'is-resetting' : undefined} />
+    </button></div>
     <div className="placeholder-fields">
       {template.fields.map((field, index) => {
         const value = placeholderValue(field, values);
