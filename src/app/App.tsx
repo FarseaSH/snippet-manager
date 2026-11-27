@@ -194,7 +194,7 @@ export function App() {
         </div>}
         <div className="detail-panel">
           {selected ? <SnippetDetail snippet={selected} initialTab={state.tabPath === selected.path ? state.tab : undefined} showTitle={!drawerOpen} notify={notify} /> : <div className="folder-placeholder">
-            <span className="brand-mark" aria-hidden="true"><Braces size={26} strokeWidth={2.2} /></span>
+            <span className="brand-mark" aria-hidden="true"><Braces size={26}><path d="m14.5 7.5-5 9" stroke="currentColor" /></Braces></span>
             {unknown ? <>
               <h1>这个位置没有找到内容</h1>
               <p>文件可能已经移动、删除，或因格式错误被跳过。</p>
