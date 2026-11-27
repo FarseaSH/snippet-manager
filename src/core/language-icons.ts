@@ -4,7 +4,7 @@ import {
   siMysql, siPhp, siPostgresql, siPython, siR, siRuby, siRust, siSass,
   siScala, siSqlite, siSwift, siTypescript, siXml, siYaml, siZsh,
   type SimpleIcon,
-} from 'snippet-manager/icons/brands';
+} from '../vendor/brand-icons.ts';
 
 type LanguageIconData = Pick<SimpleIcon, 'slug' | 'path'> & { hex?: string; stroke?: true };
 // Lucide Terminal: a flat command prompt without a surrounding frame.
