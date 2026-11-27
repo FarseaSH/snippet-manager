@@ -1,5 +1,90 @@
 import { test, expect } from '@playwright/test';
 
+for (const width of [1440, 390]) test(`目录名称区域 ${width}px 点击展开项时导航并收起，箭头仅切换当前目录`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 });
+  await page.goto('/folder/linux');
+  const tree = page.getByRole('navigation', { name: '文件夹导航', exact: true });
+  const row = (path: string) => tree.locator(`[data-folder-path="${path}"]`);
+  const python = row('python');
+  const pythonToggle = python.locator('.tree-toggle');
+  await expect(python.locator('.folder-count')).toHaveText('3');
+  await pythonToggle.click();
+  await expect(page).toHaveURL(/\/folder\/linux$/);
+  await expect(pythonToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(python.locator('.folder-count')).toBeHidden();
+  await expect(python.locator('.folder-count')).toHaveCSS('opacity', '0');
+  await python.locator('.folder-select svg').click();
+  await expect(page).toHaveURL(/\/folder\/python$/);
+  await expect(python.locator('.folder-select')).toHaveAttribute('aria-current', 'page');
+  await expect(pythonToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(python.locator('.folder-count')).toHaveText('3');
+  await expect(python.locator('.folder-count')).toHaveCSS('opacity', '1');
+  await expect(row('python/files')).toHaveCount(0);
+  await expect(page.locator('.snippet-item')).toHaveCount(3);
+  await python.locator('.folder-select > span').first().click();
+  await expect(pythonToggle).toHaveAttribute('aria-expanded', 'true');
+  await row('python/files').locator('.folder-select').click();
+  await expect(page).toHaveURL(/\/folder\/python\/files$/);
+  await expect(row('python/files').locator('.tree-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(pythonToggle).toHaveAttribute('aria-expanded', 'true');
+  await page.getByLabel('搜索代码片段').fill('json');
+  await python.locator('.folder-select').click();
+  await expect(page.getByLabel('搜索代码片段')).toHaveValue('');
+  await expect(page).toHaveURL(/\/folder\/python$/);
+  await expect(pythonToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(row('python/files')).toHaveCount(0);
+  await pythonToggle.click();
+  await expect(page).toHaveURL(/\/folder\/python$/);
+  await expect(pythonToggle).toHaveAttribute('aria-expanded', 'true');
+  await row('python/files').locator('.folder-select').click();
+  await expect(row('python/files').locator('.tree-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(pythonToggle).toHaveAttribute('aria-expanded', 'true');
+  await row('python/files').locator('.folder-select').click();
+  await row('python/files/json').locator('.folder-select').click();
+  await expect(page).toHaveURL(/\/folder\/python\/files\/json$/);
+  await expect(pythonToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(row('python/files').locator('.tree-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(row('python/files/json').locator('.folder-count')).toHaveText('1');
+});
+
+test('目录过渡支持中途反向，收起立即禁用子项，减少动态效果时直接切换', async ({ page }) => {
+  await page.goto('/folder/python/files/json');
+  const tree = page.getByRole('navigation', { name: '文件夹导航', exact: true });
+  await expect(tree).toHaveClass(/is-ready/);
+  const row = tree.locator('[data-folder-path="python"]');
+  const toggle = row.locator('.tree-toggle');
+  const children = row.locator('..').locator(':scope > .folder-children');
+  await expect(children).toHaveCSS('opacity', '1');
+  expect(await children.evaluate(node => node.getAnimations().length)).toBe(0);
+  const fullHeight = (await children.boundingBox())!.height;
+  await tree.locator('[data-folder-path="python/files/json"] > .folder-select').focus();
+  // A programmatic toggle leaves focus in the subtree so restoration is exercised.
+  await toggle.evaluate((button: HTMLButtonElement) => button.click());
+  await expect(toggle).toBeFocused();
+  await expect(children).toHaveAttribute('inert', '');
+  const middleHeight = await children.evaluate(node => {
+    const animation = node.getAnimations().find(item => item instanceof CSSTransition && item.transitionProperty === 'grid-template-rows');
+    if (!animation) throw new Error('缺少目录高度过渡');
+    animation.pause();
+    animation.currentTime = 125;
+    const height = node.getBoundingClientRect().height;
+    animation.play();
+    return height;
+  });
+  expect(middleHeight).toBeGreaterThan(0);
+  expect(middleHeight).toBeLessThan(fullHeight);
+  await toggle.evaluate((button: HTMLButtonElement) => button.click());
+  await expect(children).not.toHaveAttribute('inert', '');
+  await expect(children).toHaveCSS('opacity', '1');
+  await expect.poll(async () => (await children.boundingBox())!.height).toBeCloseTo(fullHeight, 0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await toggle.click();
+  await expect(children.locator('.folder-row')).toHaveCount(0);
+  await expect(children).toHaveCSS('transition-duration', '0s');
+  await toggle.click();
+  await expect(tree.locator('[data-folder-path="python/files/json"]')).toBeVisible();
+});
+
 test('文件夹标题右侧批量展开和折叠所有层级，不改变选择；手动收起根目录后恢复展开入口', async ({ page }) => {
   await page.goto('/folder');
   const tree = page.getByRole('navigation', { name: '文件夹导航', exact: true });

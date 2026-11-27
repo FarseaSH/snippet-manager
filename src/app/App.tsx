@@ -16,14 +16,21 @@ import { useCopyModifierListener } from '../features/snippets/useCopyModifier';
 import { useScrollActivity } from '../hooks/useScrollActivity';
 
 interface NavigationState { query: string; expanded: Set<string>; tab?: string; tabPath?: string }
-type Action = { type: 'query'; value: string } | { type: 'expand'; path: string } | { type: 'expand-all'; paths: string[] } | { type: 'reveal'; path: string } | { type: 'tab'; path: string; tab?: string };
+type Action = { type: 'query'; value: string } | { type: 'expand'; path: string } | { type: 'expand-all'; paths: string[] } | { type: 'reveal'; path: string; collapse?: boolean } | { type: 'tab'; path: string; tab?: string };
 function reducer(state: NavigationState, action: Action): NavigationState {
   if (action.type === 'query') return { ...state, query: action.value };
   if (action.type === 'tab') return { ...state, tab: action.tab, tabPath: action.path };
   if (action.type === 'expand-all') return { ...state, expanded: new Set(action.paths) };
   const expanded = new Set(state.expanded);
   if (action.type === 'expand') { if (expanded.has(action.path)) expanded.delete(action.path); else expanded.add(action.path); }
-  else { const parts = action.path.split('/'); for (let index = 1; index <= parts.length; index++) expanded.add(parts.slice(0, index).join('/')); }
+  else {
+    const parts = action.path.split('/');
+    for (let index = 1; index <= parts.length; index++) {
+      const path = parts.slice(0, index).join('/');
+      if (action.collapse && index === parts.length) expanded.delete(path);
+      else expanded.add(path);
+    }
+  }
   return { ...state, expanded };
 }
 
@@ -56,6 +63,7 @@ export function App() {
   const folder = selected
     ? (typeof location.state?.listFolder === 'string' ? location.state.listFolder : selected.folder)
     : (pathname === '/folder' ? '' : pathname.startsWith('/folder/') ? pathname.slice(8) : '');
+  const collapseSelectedFolder = snippetPath === undefined && Boolean(folder) && location.state?.collapsedFolder === folder;
   const query = state.query.trim();
   const folders = useMemo(() => {
     const values = new Map<string, Folder>();
@@ -78,8 +86,8 @@ export function App() {
   useEffect(() => {
     if (selected) { savePreference('snippet-manager:last', selected.path); document.title = `${selected.name} · Snippet Manager`; }
     else document.title = isSettings ? '设置 · Snippet Manager' : 'Snippet Manager';
-    dispatch({ type: 'reveal', path: folder });
-  }, [selected?.path, selected?.name, folder, isSettings]);
+    dispatch({ type: 'reveal', path: folder, collapse: collapseSelectedFolder });
+  }, [selected?.path, selected?.name, folder, isSettings, collapseSelectedFolder]);
   useEffect(() => {
     const mobile = window.matchMedia('(max-width: 700px)');
     const narrow = window.matchMedia('(max-width: 1100px)');
@@ -128,7 +136,12 @@ export function App() {
     dispatch({ type: 'query', value: '' });
     navigate('/');
   }
-  function selectFolder(path: string) { dispatch({ type: 'query', value: '' }); navigate(folderPath(path)); }
+  function selectFolder(path: string, collapse = false) {
+    dispatch({ type: 'query', value: '' });
+    dispatch({ type: 'reveal', path, collapse });
+    // Preserve an explicit collapse through this navigation's automatic reveal.
+    navigate(folderPath(path), { state: collapse ? { collapsedFolder: path } : null });
+  }
   function openSnippet(route: string) {
     const depth = snippetPath === undefined ? 1 : listDepth && listDepth + 1;
     navigate(route, { state: { listFolder: folder, listDepth: depth } });
