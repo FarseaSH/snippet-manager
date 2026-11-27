@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type MouseEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowDownToLine, ArrowLeft, ArrowLeftRight, ArrowRight, Braces, Check, Code2, FileText, Folder as FolderGlyph, LoaderCircle, Search, SearchX, Settings, WifiOff, X } from 'snippet-manager/icons/ui';
+import { ArrowDownToLine, ArrowLeft, ArrowLeftRight, ArrowRight, Braces, Check, Code2, Folder as FolderGlyph, Library, LoaderCircle, Search, SearchX, Settings, WifiOff, X } from 'snippet-manager/icons/ui';
 import { useContent } from './useContent';
 import { ResizablePanes } from './ResizablePanes';
 import { usePwa } from '../pwa/usePwa';
@@ -154,15 +154,8 @@ export function App() {
   const searchField = <div className="global-search"><Search size={17} /><input ref={searchRef} aria-label="搜索代码片段" placeholder="搜索名称、标签或代码…" value={state.query} onChange={event => dispatch({ type: 'query', value: event.target.value })} />{state.query ? <button className="clear-search" aria-label="清空搜索" onClick={() => dispatch({ type: 'query', value: '' })}><X size={15} /></button> : <kbd>/</kbd>}</div>;
   return <div className="app">
     <nav className="activity-bar" aria-label="活动栏" inert={mobileDrawer}>
-      <button className="activity-button activity-home" type="button" title="返回首页" aria-label="首页" onClick={goHome}>
-        <span className="activity-logo">
-          <Braces size={24} aria-hidden="true">
-            <path d="m14.5 7.5-5 9" stroke="currentColor" />
-          </Braces>
-        </span>
-      </button>
       <button className="activity-button" title="全部片段" aria-label="全部片段" onClick={() => selectFolder('')}>
-        <FileText size={21} />
+        <Library size={21} />
       </button>
       <button className="activity-button activity-settings" title="设置" aria-label="设置" onClick={() => navigate(SETTINGS_PATH)}>
         <Settings size={21} />
@@ -171,7 +164,10 @@ export function App() {
     {isSettings ? <main className="settings-page" aria-label="设置" /> : !data ? <main className="loading-state">{error ? <><WifiOff size={36} /><h1>暂时无法加载内容库</h1><p>{error}。请检查网络后重试。</p><button className="primary-button" onClick={retry}>重新加载</button></> : <><LoaderCircle className="spin" size={28} /><p>正在打开你的内容库…</p></>}</main> : <ResizablePanes narrow={isNarrow} mobile={isMobile} drawerOpen={drawerOpen}
       sidebar={<aside id="folder-sidebar" className="sidebar" inert={drawerOpen}>
         <button className="sidebar-brand" type="button" title="返回首页" aria-label="Snippet Manager 首页" onClick={goHome}>
-          Snippet Manager
+          <span className="activity-logo" aria-hidden="true">
+            <Braces size={24}><path d="m14.5 7.5-5 9" stroke="currentColor" /></Braces>
+          </span>
+          <span>Snippet Manager</span>
         </button>
         <FolderTree root={data.library.folders} {...treeProps} />
       </aside>}

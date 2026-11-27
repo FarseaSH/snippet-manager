@@ -208,17 +208,16 @@ test('子片段按语言显示 Logo，未知与缺失类型保留默认图标', 
 test('活动栏位于最左，搜索位于列表栏，窄屏搜索保持连续输入', async ({ page }) => {
   await page.goto('./');
   const brand = page.locator('.sidebar-brand');
-  const logo = page.locator('.activity-home .activity-logo');
+  const logo = brand.locator('.activity-logo');
   const activity = page.locator('.activity-bar');
   await expect(brand).toHaveText('Snippet Manager');
   await expect(brand).toHaveCSS('border-bottom-width', '0px');
   await expect(activity).toHaveCSS('background-color', 'rgb(255, 237, 213)');
   await expect(activity).toHaveCSS('border-right-width', '0px');
   await expect(activity).toHaveCSS('border-radius', '14px 0px 0px 14px');
-  await expect(logo).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(logo).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(logo).toHaveCSS('color', 'rgb(194, 65, 12)');
-  await expect(logo).toHaveCSS('border-radius', '50%');
-  await expect(logo).toHaveCSS('width', '36px');
+  await expect(logo).toHaveCSS('width', '24px');
   await expect(logo).toHaveCSS('height', '36px');
   await expect(logo.locator('path').last()).toHaveCSS('stroke', 'rgb(194, 65, 12)');
   await expect(page.locator('.sidebar')).toHaveCSS('background-color', 'rgb(245, 245, 245)');
@@ -253,20 +252,18 @@ test('活动栏位于最左，搜索位于列表栏，窄屏搜索保持连续�
 test('活动栏切换全库和设置，路径栏品牌返回首页', async ({ page }) => {
   await page.goto('folder/python');
   const activity = page.getByRole('navigation', { name: '活动栏' });
-  const logo = activity.getByRole('button', { name: '首页' });
   const home = page.locator('.sidebar').getByRole('button', { name: 'Snippet Manager 首页' });
   const library = activity.getByRole('button', { name: '全部片段' });
   const settings = activity.getByRole('button', { name: '设置' });
   await expect(activity.locator('[aria-current]')).toHaveCount(0);
-  await expect(activity.getByRole('button')).toHaveCount(3);
+  await expect(activity.getByRole('button')).toHaveCount(2);
   await expect(page.locator('.sidebar .all-folder')).toBeVisible();
   const rail = (await activity.boundingBox())!;
   expect(rail.x).toBe(0);
   expect(rail.width).toBe(48);
-  const desktopLogo = (await logo.boundingBox())!;
-  expect(desktopLogo.y - rail.y).toBe(12);
-  expect((await library.boundingBox())!.y - desktopLogo.y - desktopLogo.height).toBe(12);
-  await expect(library.locator('.lucide-file-text')).toBeVisible();
+  expect((await library.boundingBox())!.y - rail.y).toBe(12);
+  await expect(library.locator('.lucide-library')).toBeVisible();
+  await expect(home.locator('.activity-logo')).toBeVisible();
   expect((await settings.boundingBox())!.y).toBeGreaterThan((await library.boundingBox())!.y);
 
   await page.getByLabel('搜索代码片段').fill('ssh proxy');
@@ -288,18 +285,13 @@ test('活动栏切换全库和设置，路径栏品牌返回首页', async ({ pa
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(activity).toHaveCSS('width', '390px');
-  const mobileLogo = (await logo.boundingBox())!;
   const mobileLibrary = (await library.boundingBox())!;
   const mobileSettings = (await settings.boundingBox())!;
-  expect(mobileLogo.y).toBe(mobileLibrary.y);
   expect(mobileSettings.y).toBe(mobileLibrary.y);
-  expect(mobileLogo.x).toBe(12);
-  expect(mobileLibrary.x - mobileLogo.x - mobileLogo.width).toBe(12);
+  expect(mobileLibrary.x).toBe(12);
   expect(mobileSettings.x).toBeGreaterThan(mobileLibrary.x);
   await expect(settingsPage).toBeVisible();
   await expect(page.getByLabel('搜索代码片段')).toHaveCount(0);
-  await logo.click();
-  await expect(page).toHaveURL(test.info().project.use.baseURL!);
   await library.click();
   await expect(page).toHaveURL(/\/folder$/);
   await home.click();
