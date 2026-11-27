@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronRight, Library } from 'snippet-manager/icons/ui';
 import type { Folder } from '../../core/types';
 import { FolderIcon } from './FolderIcon';
+import { FolderCount } from './FolderCount';
 import { useScrollActivity } from '../../hooks/useScrollActivity';
 
 interface Props { root: Folder; selected: string; expanded: Set<string>; onExpand(path: string): void; onExpandAll(paths: string[]): void; onSelect(path: string, collapse?: boolean): void }
@@ -10,7 +11,7 @@ type FolderItemProps = Pick<Props, 'selected' | 'expanded' | 'onExpand' | 'onSel
 
 function FolderItem({ folder, depth, selected, expanded, onExpand, onSelect }: FolderItemProps) {
   const open = expanded.has(folder.path);
-  const hideCount = open && folder.children.length > 0;
+  const count = open ? folder.snippets.length : folder.count;
   const [retainChildren, setRetainChildren] = useState(open);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const childrenRef = useRef<HTMLDivElement>(null);
@@ -31,7 +32,7 @@ function FolderItem({ folder, depth, selected, expanded, onExpand, onSelect }: F
     <div className={`folder-row ${selected === folder.path ? 'selected' : ''}`} data-folder-path={folder.path} style={{ paddingInlineStart: `min(calc(6px + ${depth} * var(--folder-indent, 16px)), 32%)` }}>
       {folder.children.length ? <button ref={toggleRef} type="button" className="tree-toggle" aria-label={`${open ? '收起' : '展开'} ${folder.name}`} aria-expanded={open} onClick={() => onExpand(folder.path)}><ChevronRight size={13} aria-hidden="true" /></button> : <span className="tree-spacer" />}
       <button className="folder-select" title={folder.name} onClick={() => onSelect(folder.path, Boolean(folder.children.length && open))} aria-current={selected === folder.path ? 'page' : undefined}>
-        <FolderIcon icon={folder.icon} /><span>{folder.name}</span><span className={`folder-count${hideCount ? ' is-hidden' : ''}`} aria-hidden={hideCount || undefined}>{folder.count}</span>
+        <FolderIcon icon={folder.icon} /><span>{folder.name}</span><FolderCount count={count} expanded={open} />
       </button>
     </div>
     {folder.children.length > 0 && <div ref={childrenRef} className={`folder-children${open ? ' is-open' : ''}`} inert={!open} aria-hidden={!open} onTransitionEnd={event => {

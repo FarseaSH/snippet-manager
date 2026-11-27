@@ -7,7 +7,7 @@ for (const width of [1440, 390]) test(`目录名称区域 ${width}px 点击展�
   const row = (path: string) => tree.locator(`[data-folder-path="${path}"]`);
   const python = row('python');
   const pythonToggle = python.locator('.tree-toggle');
-  await expect(python.locator('.folder-count')).toHaveText('3');
+  await expect(python.locator('.folder-count-current')).toHaveText('3');
   await pythonToggle.click();
   await expect(page).toHaveURL(/\/folder\/linux$/);
   await expect(pythonToggle).toHaveAttribute('aria-expanded', 'true');
@@ -17,7 +17,7 @@ for (const width of [1440, 390]) test(`目录名称区域 ${width}px 点击展�
   await expect(page).toHaveURL(/\/folder\/python$/);
   await expect(python.locator('.folder-select')).toHaveAttribute('aria-current', 'page');
   await expect(pythonToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(python.locator('.folder-count')).toHaveText('3');
+  await expect(python.locator('.folder-count-current')).toHaveText('3');
   await expect(python.locator('.folder-count')).toHaveCSS('opacity', '1');
   await expect(row('python/files')).toHaveCount(0);
   await expect(page.locator('.snippet-item')).toHaveCount(3);
@@ -44,7 +44,7 @@ for (const width of [1440, 390]) test(`目录名称区域 ${width}px 点击展�
   await expect(page).toHaveURL(/\/folder\/python\/files\/json$/);
   await expect(pythonToggle).toHaveAttribute('aria-expanded', 'true');
   await expect(row('python/files').locator('.tree-toggle')).toHaveAttribute('aria-expanded', 'true');
-  await expect(row('python/files/json').locator('.folder-count')).toHaveText('1');
+  await expect(row('python/files/json').locator('.folder-count-current')).toHaveText('1');
 });
 
 test('目录过渡支持中途反向，收起立即禁用子项，减少动态效果时直接切换', async ({ page }) => {

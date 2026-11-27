@@ -20,6 +20,52 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (process.env.APP_TEST_MODE !== 'production') { verifyFixture(); await fs.rm(fixture, { recursive: true, force: true }); } });
 
+test('实际滚动条出现和消失时，文件夹数量 badge 在整个过渡中保持水平位置', async ({ browser, baseURL }) => {
+  // Headless Chromium normally hides scrollbars, which masks this layout shift.
+  const launchOptions = test.info().project.use.launchOptions;
+  const visibleScrollbarBrowser = await browser.browserType().launch({
+    ...launchOptions, headless: true, ignoreDefaultArgs: ['--hide-scrollbars'],
+    args: [...(launchOptions?.args ?? []), '--disable-features=OverlayScrollbar,OverlayScrollbars,FluentOverlayScrollbar'],
+  });
+  try {
+    const page = await visibleScrollbarBrowser.newPage({ baseURL });
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.goto('/folder');
+      const tree = page.getByRole('navigation', { name: '文件夹导航', exact: true });
+      await expect(tree).toHaveClass(/is-ready/);
+      await tree.locator('[data-folder-path="python"] > .tree-toggle').click();
+      const files = tree.locator('[data-folder-path="python/files"]');
+      await expect(files).toBeVisible();
+      await expect.poll(() => tree.locator('[data-folder-path="python"]').evaluate(node => node.parentElement!.querySelector('.folder-children')!.getAnimations().length)).toBe(0);
+      const scroller = tree.locator('.folder-tree-scroll');
+      const height = await scroller.evaluate(node => Math.ceil(node.getBoundingClientRect().top + node.firstElementChild!.getBoundingClientRect().height + parseFloat(getComputedStyle(node).paddingBottom) + 34));
+      await page.setViewportSize({ width, height });
+      await expect(scroller).toHaveCSS('scrollbar-gutter', 'stable');
+      expect(await scroller.evaluate(node => node.scrollHeight <= node.clientHeight)).toBe(true);
+      expect(await scroller.evaluate((node: HTMLElement) => node.offsetWidth - node.clientWidth)).toBe(4);
+      for (const opening of [true, false]) {
+        const positions = await files.evaluate(async row => {
+          const scroller = row.closest('.folder-tree-scroll')!;
+          const stationaryBadge = scroller.querySelector('[data-folder-path="git"] .folder-count')!;
+          const badge = row.querySelector('.folder-count')!;
+          const snapshot = () => [scroller.clientWidth, stationaryBadge.getBoundingClientRect().right, badge.getBoundingClientRect().right];
+          const positions = [snapshot()];
+          (row.querySelector('.tree-toggle') as HTMLButtonElement).click();
+          const start = performance.now();
+          await new Promise<void>(resolve => {
+            const frame = () => { positions.push(snapshot()); if (performance.now() - start < 400) requestAnimationFrame(frame); else resolve(); };
+            requestAnimationFrame(frame);
+          });
+          return positions;
+        });
+        expect(positions.every(position => position.every((value, index) => Math.abs(value - positions[0][index]) < 0.1))).toBe(true);
+        expect(await scroller.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(opening);
+      }
+    }
+  } finally { await visibleScrollbarBrowser.close(); }
+});
+
 for (const width of [1440, 390]) test(`侧边栏 ${width}px 固定头部，仅文件夹列表滚动，键盘定位与批量折叠正常`, async ({ page }) => {
   await page.setViewportSize({ width, height: 640 });
   await page.goto('/folder');
